@@ -92,15 +92,17 @@ validate_group_log() {
   local script_name="${group}_testcode.sh"
 
   # Hard failure signatures that should never be considered PASS.
-  if grep -Eq "No such file or directory|exec failed for" "${log_file}"; then
+  # Only catch shell-level execution failures (e.g. "can't execute 'cmd': No such file or directory"),
+  # not application-level error messages like "iperf3: failed to open /dev/urandom: No such file or directory".
+  if grep -aEq "can't execute.*: No such file or directory|exec failed for" "${log_file}"; then
     return 1
   fi
 
   # A group is PASS only when both musl and glibc runs finish with exit_code=0.
-  if ! grep -Fq "[initproc] done ${script_name} in /musl exit_code=0" "${log_file}"; then
+  if ! grep -aFq "[initproc] done ${script_name} in /musl exit_code=0" "${log_file}"; then
     return 1
   fi
-  if ! grep -Fq "[initproc] done ${script_name} in /glibc exit_code=0" "${log_file}"; then
+  if ! grep -aFq "[initproc] done ${script_name} in /glibc exit_code=0" "${log_file}"; then
     return 1
   fi
 

@@ -933,16 +933,21 @@ pub fn sys_futex(
     );
     match cmd {
         FutexCmd::Wait => {
-            let timeout = match cmd {
-                FutexCmd::Wait | FutexCmd::LockPi | FutexCmd::WaitBitset => {
-                    match try_get_from_user(token, timeout) {
-                        Ok(timeout) => timeout,
-                        Err(errno) => return errno,
-                    }
-                }
-                _ => None,
+            let timeout = match try_get_from_user(token, timeout) {
+                Ok(timeout) => timeout,
+                Err(errno) => return errno,
             };
-            // guess what will happen if we don't do `drop(task)` here?
+            drop(task);
+            do_futex_wait(futex_word, val, timeout)
+        }
+        FutexCmd::WaitBitset => {
+            if val3 == 0 {
+                return EINVAL;
+            }
+            let timeout = match try_get_from_user(token, timeout) {
+                Ok(timeout) => timeout,
+                Err(errno) => return errno,
+            };
             drop(task);
             do_futex_wait(futex_word, val, timeout)
         }
@@ -961,6 +966,45 @@ pub fn sys_futex(
             task.futex
                 .lock()
                 .requeue(futex_word, futex_word_2, val, timeout as u32)
+        }
+        FutexCmd::WakeOp => {
+            if uaddr2.is_null() || uaddr2.align_offset(4) != 0 {
+                return EINVAL;
+            }
+            let futex_word_2 = match translated_refmut(token, uaddr2) {
+                Ok(futex_word_2) => futex_word_2,
+                Err(errno) => return errno,
+            };
+            let op = (val3 >> 28) & 0xf;
+            let cmp = (val3 >> 24) & 0xf;
+            let cmparg = val3 & 0xfff;
+
+            let oldval = *futex_word_2;
+            let newval = match op {
+                0 => cmparg,
+                1 => oldval.wrapping_add(cmparg),
+                2 => oldval | cmparg,
+                3 => oldval & !cmparg,
+                4 => oldval ^ cmparg,
+                _ => return EINVAL,
+            };
+            *futex_word_2 = newval;
+
+            let cond = match cmp {
+                0 => oldval == cmparg,
+                1 => oldval != cmparg,
+                2 => oldval < cmparg,
+                3 => oldval <= cmparg,
+                4 => oldval > cmparg,
+                5 => oldval >= cmparg,
+                _ => true,
+            };
+
+            let futex_word_addr = futex_word as *const u32 as usize;
+            let futex_word_addr_2 = futex_word_2 as *const u32 as usize;
+            task.futex
+                .lock()
+                .wake_op(futex_word_addr, futex_word_addr_2, val, cond)
         }
         FutexCmd::Invalid => EINVAL,
         _ => todo!(),

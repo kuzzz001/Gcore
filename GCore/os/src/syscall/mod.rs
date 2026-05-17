@@ -13,6 +13,7 @@ use log::{error, info};
 use net::*;
 pub use process::CloneFlags;
 use process::*;
+use rand_core::RngCore;
 use syscall_id::*;
 pub fn syscall_name(id: usize) -> &'static str {
     match id {
@@ -435,7 +436,18 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
     ret
 }
 
-/// todo: 未实现
-pub fn sys_getrandom(_buf: usize, _buflen: usize, _flags: u32) -> isize {
-    0
+pub fn sys_getrandom(buf: usize, buflen: usize, _flags: u32) -> isize {
+    if buflen == 0 {
+        return 0;
+    }
+    let token = crate::task::current_user_token();
+    let user_buf = match crate::mm::translated_byte_buffer(token, buf as *const u8, buflen) {
+        Ok(buf) => buf,
+        Err(errno) => return errno,
+    };
+    let mut user_buf = crate::mm::UserBuffer::new(user_buf);
+    let len = user_buf.len();
+    let mut tmp = alloc::vec![0u8; len];
+    unsafe { crate::utils::random::RNG.fill_bytes(&mut tmp) };
+    user_buf.write(&tmp) as isize
 }

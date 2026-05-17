@@ -1,47 +1,50 @@
 use rand_core::RngCore;
 
-use crate::timer::get_time_ms;
+use crate::timer::get_time_ns;
 
 pub struct Rng {
-    pub seed: usize,
+    pub state: u64,
 }
-
-pub const BIGPRIME: usize = 1242132739;
 
 impl RngCore for Rng {
     fn next_u32(&mut self) -> u32 {
-        let next = self.seed + get_time_ms() as usize;
-        self.seed = next;
-        next as u32
+        self.next_u64() as u32
     }
 
     fn next_u64(&mut self) -> u64 {
-        let next = self.seed + get_time_ms() as usize;
-        self.seed = next;
-        next as u64
+        self.state = self.state.wrapping_add(0x9e3779b97f4a7c15);
+        let mut z = self.state;
+        z = (z ^ (z >> 30)).wrapping_mul(0xbf58476d1ce4e5b9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94d049bb133111eb);
+        z ^ (z >> 31)
     }
 
     fn fill_bytes(&mut self, dest: &mut [u8]) {
-        for i in 0..dest.len() {
-            let number = self.next_u32();
-            dest[i] = ((number >> 16) ^ (number << 8) ^ number) as u8;
+        for chunk in dest.chunks_mut(8) {
+            let val = self.next_u64().to_le_bytes();
+            let len = chunk.len();
+            chunk.copy_from_slice(&val[..len]);
         }
     }
 
-    fn try_fill_bytes(&mut self, _dest: &mut [u8]) -> Result<(), rand_core::Error> {
-        todo!()
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand_core::Error> {
+        self.fill_bytes(dest);
+        Ok(())
     }
 }
 
 impl Rng {
     pub fn positive_u32(&mut self) -> u32 {
-        let mut next = self.seed + get_time_ms() as usize;
-        while (next & 0xff) as u32 == 0 {
-            self.seed = next;
-            next = self.seed + get_time_ms() as usize;
-        }
-        (next & 0xff) as u32
+        (self.next_u64() >> 33) as u32
     }
 }
 
-pub static mut RNG: Rng = Rng { seed: BIGPRIME };
+pub static mut RNG: Rng = Rng {
+    state: 0x9e3779b97f4a7c15,
+};
+
+pub fn init_rng() {
+    unsafe {
+        RNG.state = RNG.state.wrapping_add(get_time_ns() as u64);
+    }
+}

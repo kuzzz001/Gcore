@@ -107,6 +107,7 @@ pub fn rust_main() -> ! {
     console::log_init();
     println!("[kernel] Console initialized.");
     mm::init();
+    utils::random::init_rng();
     println!("[kernel] Hello, world!");
     // note that remap_test is currently NOT supported by LA64, for the whole kernel space is RW!
     // #[cfg(feature = "riscv")]

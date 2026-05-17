@@ -1,5 +1,7 @@
 use crate::fs::{dirent::Dirent, DiskInodeType};
+use crate::utils::random::RNG;
 use alloc::sync::Arc;
+use rand_core::RngCore;
 
 use crate::{
     fs::{directory_tree::DirectoryTreeNode, file_trait::File, layout::Stat, StatMode},
@@ -22,9 +24,10 @@ impl File for Urandom {
     fn writable(&self) -> bool {
         true
     }
-    ///todo: 未实现随机，read函数什么都没做，返回0
+
     fn read(&self, offset: Option<&mut usize>, buf: &mut [u8]) -> usize {
-        0
+        unsafe { RNG.fill_bytes(buf) };
+        buf.len()
     }
 
     fn write(&self, offset: Option<&mut usize>, buf: &[u8]) -> usize {
@@ -58,8 +61,10 @@ impl File for Urandom {
     }
 
     fn read_user(&self, offset: Option<usize>, mut buf: UserBuffer) -> usize {
-        buf.clear();
-        buf.len()
+        let len = buf.len();
+        let mut tmp = alloc::vec![0u8; len];
+        unsafe { RNG.fill_bytes(&mut tmp) };
+        buf.write(&tmp)
     }
 
     fn write_user(&self, offset: Option<usize>, buf: UserBuffer) -> usize {

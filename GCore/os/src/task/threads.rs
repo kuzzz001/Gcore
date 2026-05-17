@@ -207,4 +207,22 @@ impl Futex {
     pub fn clear(&mut self) {
         self.inner.clear();
     }
+
+    pub fn wake_op(
+        &mut self,
+        futex_word_addr: usize,
+        futex_word_addr_2: usize,
+        val: u32,
+        do_wake2: bool,
+    ) -> isize {
+        let nr_wake = (val & 0x7fffffff) as u32;
+        let ret = self.wake(futex_word_addr, nr_wake);
+
+        if do_wake2 {
+            let nr_wake2 = ((val >> 16) & 0xffff) as u32;
+            ret + self.wake(futex_word_addr_2, nr_wake2)
+        } else {
+            ret
+        }
+    }
 }

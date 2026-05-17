@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Phase 1 — 核心功能补全
+
+#### 随机数子系统
+
+- **重写** `os/src/utils/random.rs`：用 SplitMix64 算法替换原有的弱随机数生成器
+  - 实现 `RngCore::try_fill_bytes`（原为 `todo!()`）
+  - 改进 `fill_bytes` 使用完整的 64 位随机数填充
+  - 扩展 `positive_u32` 的返回值范围（原来是 0-255，现在使用完整的 31 位正数范围）
+  - 移除未使用的 `BIGPRIME` 常量
+
+- **修复** `os/src/fs/dev/urandom.rs`：`/dev/urandom` 的 `read` 方法现在正确返回随机数（原来直接返回 0）
+
+- **实现** `sys_getrandom` 系统调用：`os/src/syscall/mod.rs` 中的 `sys_getrandom` 现在使用 RNG 填充用户缓冲区
+
+#### Futex 子系统
+
+- **实现** `FutexCmd::WaitBitset (9)`：支持带位掩码的 futex 等待操作，包含 bitset 有效性校验
+
+- **实现** `FutexCmd::WakeOp (5)`：支持 futex 唤醒并操作（FUTEX_WAKE_OP）
+  - 支持全部 5 种原子操作：SET、ADD、OR、ANDN、XOR
+  - 支持全部 6 种比较条件：EQ、NE、LT、LE、GT、GE
+  - 对 uaddr 和 uaddr2 的唤醒均正确实现
+
 ### Changed
 
 - 项目重命名：从 MangoCore 更名为 Gcore
