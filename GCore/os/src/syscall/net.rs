@@ -1,6 +1,6 @@
 use crate::mm::{translated_ref, translated_refmut};
 use crate::{
-    config::PAGE_SIZE, fs::FileDescriptor, net::{
+    fs::FileDescriptor, net::{
         address::{self, SocketAddrv4},
         make_unix_socket_pair, Socket, SocketType, TCP_MSS,
     }, 
@@ -44,14 +44,26 @@ pub fn sys_socket(domain: u32, socket_type: u32, protocol: u32) -> isize {
 pub fn sys_bind(sockfd: u32, addr: usize, addrlen: u32) -> isize {
     let addr_buf = trans_ref!(addr, addrlen);
     let socket = get_socket!(sockfd);
-    let endpoint = address::listen_endpoint(addr_buf).unwrap();
+    let endpoint = match address::listen_endpoint(addr_buf) {
+        Ok(ep) => ep,
+        Err(_) => {
+            info!("[sys_bind] cannot parse address as IP endpoint, using dummy");
+            IpListenEndpoint { addr: None, port: 0 }
+        }
+    };
     match socket.socket_type() {
-        SocketType::SOCK_STREAM => socket.bind(endpoint).unwrap() as isize,
+        SocketType::SOCK_STREAM => match socket.bind(endpoint) {
+            Ok(v) => v as isize,
+            Err(e) => -(e as isize),
+        },
         SocketType::SOCK_DGRAM => {
             let res = current_task().unwrap().socket_table.lock().can_bind(endpoint);
             if res.is_none(){
                 info!("[sys_bind] not find port exist");
-                socket.bind(endpoint).unwrap() as isize
+                match socket.bind(endpoint) {
+                    Ok(v) => v as isize,
+                    Err(e) => -(e as isize),
+                }
             }else {
                 let (_,sock) = res.unwrap();
                 current_task().unwrap().socket_table.lock().insert(sockfd as usize, sock.clone());
@@ -59,34 +71,52 @@ pub fn sys_bind(sockfd: u32, addr: usize, addrlen: u32) -> isize {
                 0
             }
         }
-        _ => todo!(),
+        _ => {
+            info!("[sys_bind] unsupported socket type: {:?}", socket.socket_type());
+            return EINVAL;
+        }
     }
 }
 
 pub fn sys_listen(sockfd: u32, _backlog: u32) -> isize {
     let socket = get_socket!(sockfd);
-    socket.listen().unwrap() as isize
+    match socket.listen() {
+        Ok(v) => v as isize,
+        Err(e) => -(e as isize),
+    }
 }
 
 pub  fn sys_accept(sockfd: u32, addr: usize, addrlen: usize) -> isize {
     let socket = get_socket!(sockfd);
-    socket.accept(sockfd, addr, addrlen).unwrap() as isize
+    match socket.accept(sockfd, addr, addrlen) {
+        Ok(v) => v as isize,
+        Err(e) => -(e as isize),
+    }
 }
 
 pub  fn sys_connect(sockfd: u32, addr: usize, addrlen: u32) -> isize {
     let addr_buf = trans_ref!(addr, addrlen);
     let socket = get_socket!(sockfd);
-    socket.connect(addr_buf).unwrap() as isize
+    match socket.connect(addr_buf) {
+        Ok(v) => v as isize,
+        Err(e) => -(e as isize),
+    }
 }
 
 pub fn sys_getsockname(sockfd: u32, addr: usize, addrlen: usize) -> isize {
     let socket = get_socket!(sockfd);
-    socket.addr(addr, addrlen).unwrap() as isize
+    match socket.addr(addr, addrlen) {
+        Ok(v) => v as isize,
+        Err(e) => -(e as isize),
+    }
 }
 
 pub fn sys_getpeername(sockfd: u32, addr: usize, addrlen: usize) -> isize {
     let socket = get_socket!(sockfd);
-    socket.peer_addr(addr, addrlen).unwrap() as isize
+    match socket.peer_addr(addr, addrlen) {
+        Ok(v) => v as isize,
+        Err(e) => -(e as isize),
+    }
 }
 
 pub fn sys_sendto(
@@ -119,7 +149,7 @@ pub fn sys_sendto(
             let _ = socket.connect(dest_addr);
             socket_file.file.write(Some(&mut offset),buf)
         }
-        _ => todo!(),
+        _ => return EINVAL,
     };
     len as isize
 }
@@ -137,28 +167,20 @@ pub  fn sys_recvfrom(
     let token = task.get_user_token();
     let buf = translated_refmut(token, buf as *mut u8).unwrap();
     let buf = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, len as usize) };
-    //info!("[sys_recvfrom] file filags: {:?}", socket_file.flags);
     let socket = get_socket!(sockfd);
 
     info!("[sys_recvfrom] get socket sockfd: {}", sockfd);
 
     let mut offset = 0 as usize;
     match socket.socket_type() {
-        SocketType::SOCK_STREAM => {
+        SocketType::SOCK_STREAM | SocketType::SOCK_DGRAM => {
             let len = socket_file.file.read(Some(&mut offset),buf);
             if src_addr != 0 {
                 let _ = socket.peer_addr(src_addr, addrlen);
             }
             len as isize
         }
-        SocketType::SOCK_DGRAM => {
-            let len = socket_file.file.read(Some(&mut offset),buf);
-            if src_addr != 0 {
-                let _ = socket.peer_addr(src_addr, addrlen);
-            }
-            len as isize
-        }
-        _ => todo!(),
+        _ => return EINVAL,
     }
 }
 
@@ -281,9 +303,23 @@ pub fn sys_socketpair(domain: u32, socket_type: u32, protocol: u32, sv: usize) -
         "[sys_socketpair] domain {}, type {}, protocol {}, sv {}",
         domain, socket_type, protocol, sv
     );
+    if domain as u16 != crate::net::AF_UNIX {
+        return EAFNOSUPPORT;
+    }
+    let socket_type = match SocketType::from_bits(socket_type) {
+        Some(t) => t,
+        None => return EINVAL,
+    };
+    let base_type = if socket_type.contains(SocketType::SOCK_STREAM) {
+        SocketType::SOCK_STREAM
+    } else if socket_type.contains(SocketType::SOCK_DGRAM) {
+        SocketType::SOCK_DGRAM
+    } else {
+        return EINVAL;
+    };
     let len = 2 * core::mem::size_of::<u32>();
     let sv = unsafe { core::slice::from_raw_parts_mut(sv as *mut u32, len) };
-    let (socket1, socket2) = make_unix_socket_pair::<PAGE_SIZE>();
+    let (socket1, socket2) = make_unix_socket_pair(base_type);
     let fd1 = current_task().unwrap().files.lock().insert(FileDescriptor::new(false, false, socket1));
     let fd2 = current_task().unwrap().files.lock().insert(FileDescriptor::new(false, false, socket2));
     sv[0] = fd1.unwrap() as u32;

@@ -2,7 +2,7 @@ use alloc::sync::{Arc, Weak};
 
 use crate::{
     fs::{dirent::Dirent, file_trait::File, DiskInodeType},
-    syscall::errno::ENOTDIR,
+    syscall::errno::{EINVAL, ENOTDIR, ESPIPE},
 };
 
 struct Socket;
@@ -14,63 +14,71 @@ pub fn make_socket() -> Arc<dyn File> {
 #[allow(unused)]
 impl File for Socket {
     fn deep_clone(&self) -> Arc<dyn File> {
-        todo!()
+        Arc::new(Socket {})
     }
 
     fn readable(&self) -> bool {
-        todo!()
+        true
     }
 
     fn writable(&self) -> bool {
-        todo!()
+        true
     }
 
     fn read(&self, offset: Option<&mut usize>, buf: &mut [u8]) -> usize {
-        todo!()
+        0
     }
 
     fn write(&self, offset: Option<&mut usize>, buf: &[u8]) -> usize {
-        todo!()
+        0
     }
 
     fn r_ready(&self) -> bool {
-        todo!()
+        false
     }
 
     fn w_ready(&self) -> bool {
-        todo!()
+        false
     }
 
     fn read_user(&self, offset: Option<usize>, buf: crate::mm::UserBuffer) -> usize {
-        todo!()
+        0
     }
 
     fn write_user(&self, offset: Option<usize>, buf: crate::mm::UserBuffer) -> usize {
-        todo!()
+        0
     }
 
     fn get_size(&self) -> usize {
-        todo!()
+        0
     }
 
     fn get_stat(&self) -> crate::fs::Stat {
-        todo!()
+        crate::fs::Stat::new(
+            crate::makedev!(0, 6),
+            1,
+            crate::fs::StatMode::S_IFSOCK.bits() | 0o666,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+        )
     }
 
     fn get_file_type(&self) -> DiskInodeType {
-        todo!()
+        DiskInodeType::File
     }
 
-    fn info_dirtree_node(&self, dirnode_ptr: Weak<crate::fs::directory_tree::DirectoryTreeNode>) {
-        todo!()
-    }
+    fn info_dirtree_node(&self, dirnode_ptr: Weak<crate::fs::directory_tree::DirectoryTreeNode>) {}
 
     fn get_dirtree_node(&self) -> Option<Arc<crate::fs::directory_tree::DirectoryTreeNode>> {
-        todo!()
+        None
     }
 
     fn open(&self, flags: crate::fs::OpenFlags, special_use: bool) -> Arc<dyn File> {
-        todo!()
+        Arc::new(Socket {})
     }
 
     fn open_subfile(
@@ -80,62 +88,60 @@ impl File for Socket {
     }
 
     fn create(&self, name: &str, file_type: DiskInodeType) -> Result<Arc<dyn File>, isize> {
-        todo!()
+        Err(EINVAL)
     }
 
     fn link_child(&self, name: &str, child: &Self) -> Result<(), isize>
     where
         Self: Sized,
     {
-        todo!()
+        Err(EINVAL)
     }
 
     fn unlink(&self, delete: bool) -> Result<(), isize> {
-        todo!()
+        Err(EINVAL)
     }
 
     fn get_dirent(&self, count: usize) -> alloc::vec::Vec<Dirent> {
-        todo!()
+        alloc::vec::Vec::new()
     }
 
     fn lseek(&self, offset: isize, whence: crate::fs::SeekWhence) -> Result<usize, isize> {
-        todo!()
+        Err(ESPIPE)
     }
 
     fn modify_size(&self, diff: isize) -> Result<(), isize> {
-        todo!()
+        Ok(())
     }
 
     fn truncate_size(&self, new_size: usize) -> Result<(), isize> {
-        todo!()
+        Err(EINVAL)
     }
 
-    fn set_timestamp(&self, ctime: Option<usize>, atime: Option<usize>, mtime: Option<usize>) {
-        todo!()
-    }
+    fn set_timestamp(&self, ctime: Option<usize>, atime: Option<usize>, mtime: Option<usize>) {}
 
     fn get_single_cache(
         &self,
         offset: usize,
     ) -> Result<Arc<spin::Mutex<crate::fs::PageCache>>, ()> {
-        todo!()
+        Err(())
     }
 
     fn get_all_caches(
         &self,
     ) -> Result<alloc::vec::Vec<Arc<spin::Mutex<crate::fs::PageCache>>>, ()> {
-        todo!()
+        Err(())
     }
 
     fn oom(&self) -> usize {
-        todo!()
+        0
     }
 
     fn hang_up(&self) -> bool {
-        todo!()
+        false
     }
 
     fn fcntl(&self, cmd: u32, arg: u32) -> isize {
-        todo!()
+        EINVAL
     }
 }

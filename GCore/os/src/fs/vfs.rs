@@ -4,37 +4,27 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use downcast_rs::{impl_downcast, DowncastSync};
 
-// 根目录项
 use super::directory_tree::ROOT;
 use super::ext4::{ext4fs::Ext4FileSystem, layout::Ext4OSInode, ROOT_INODE};
 use super::fat32::{EasyFileSystem, FatInode, FatOSInode};
 use super::file_trait::File;
 use super::filesystem::{pre_mount, FS_Type};
 
-// VFS trait, 实现了该trait的文件系统都应该可以直接
-// 被 Gcore 支持
 pub trait VFS: DowncastSync {
-    // 关闭文件
-    fn close(&self) -> () {
-        todo!();
+    fn close(&self) {
+        unreachable!()
     }
 
-    // 读取文件
     fn read(&self) -> Vec<u8> {
-        todo!();
+        unreachable!()
     }
 
-    // 写入文件
     fn write(&self, _data: Vec<u8>) -> usize {
-        todo!();
+        unreachable!()
     }
-
-    // fn get_super_block(&self) -> SuperBlock {
-    //     todo!();
-    // }
 
     fn get_direcotry(&self) -> ROOT {
-        todo!();
+        unreachable!()
     }
 
     fn alloc_blocks(&self, blocks: usize) -> Vec<usize>;
@@ -53,7 +43,6 @@ impl dyn VFS {
         let fs_type = pre_mount();
         match fs_type {
             FS_Type::Fat32 => EasyFileSystem::open(block_device, index_cache_mgr),
-            // FS_Type::Ext4 => Ext4FileSystem::open(block_device, index_cache_mgr),
             FS_Type::Ext4 => Arc::new(Ext4FileSystem::open_ext4rs(block_device, index_cache_mgr)),
             FS_Type::Null => panic!("no filesystem found"),
         }
@@ -71,8 +60,6 @@ impl dyn VFS {
     }
 }
 
-// 对不同类型文件系统文件的封装
 pub trait VFSFileContent {}
 
-// 对不同类型文件系统目录的封装
 pub trait VFSDirEnt {}

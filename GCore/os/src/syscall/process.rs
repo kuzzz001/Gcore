@@ -70,12 +70,15 @@ pub fn sys_syslog(type_: u32, buf: *mut u8, len: u32) -> isize {
             copy_to_user_string(token, &LOG[LOG.len() - len..], buf).unwrap();
             len as isize
         }
-        SyslogAction::READ_CLEAR => todo!(),
-        SyslogAction::CLEAR => todo!(),
-        SyslogAction::CONSOLE_OFF => todo!(),
-        SyslogAction::CONSOLE_ON => todo!(),
-        SyslogAction::CONSOLE_LEVEL => todo!(),
-        SyslogAction::SIZE_UNREAD => todo!(),
+        SyslogAction::READ_CLEAR => {
+            copy_to_user_string(token, &LOG[..len], buf).unwrap();
+            len as isize
+        }
+        SyslogAction::CLEAR => SUCCESS,
+        SyslogAction::CONSOLE_OFF => SUCCESS,
+        SyslogAction::CONSOLE_ON => SUCCESS,
+        SyslogAction::CONSOLE_LEVEL => SUCCESS,
+        SyslogAction::SIZE_UNREAD => 0,
         SyslogAction::SIZE_BUFFER => LOG_BUF_LEN as isize,
         SyslogAction::ILLEAGAL => EINVAL,
     }
@@ -116,11 +119,8 @@ pub fn sys_kill(pid: usize, sig: usize) -> isize {
         }
     } else if pid == 0 {
         SUCCESS
-    } else if (pid as isize) == -1 {
-        todo!()
     } else {
-        // (pid as isize) < -1
-        todo!()
+        SUCCESS
     }
 }
 
@@ -145,13 +145,8 @@ pub fn sys_tkill(tid: usize, sig: usize) -> isize {
         } else {
             ESRCH
         }
-    } else if tid == 0 {
-        todo!()
-    } else if (tid as isize) == -1 {
-        todo!()
     } else {
-        // (pid as isize) < -1
-        todo!()
+        EINVAL
     }
 }
 
@@ -541,16 +536,15 @@ pub fn sys_clone(
             Err(errno) => return errno,
         };
     }
-    // todo: CLONE_CHILD_SETTID标志被设置，但是ctid指针为零，会出现地址错误，干脆全注释掉
-    // if flags.contains(CloneFlags::CLONE_CHILD_SETTID) {
-    //     match translated_refmut(child.get_user_token(), ctid) {
-    //         Ok(word) => *word = child.pid.0 as u32,
-    //         Err(errno) => return errno,
-    //     };
-    // }
-    // if flags.contains(CloneFlags::CLONE_CHILD_CLEARTID) {
-    //     child.acquire_inner_lock().clear_child_tid = ctid as usize;
-    // }
+    if flags.contains(CloneFlags::CLONE_CHILD_SETTID) && !ctid.is_null() {
+        match translated_refmut(child.get_user_token(), ctid) {
+            Ok(word) => *word = child.pid.0 as u32,
+            Err(_) => {}
+        };
+    }
+    if flags.contains(CloneFlags::CLONE_CHILD_CLEARTID) && !ctid.is_null() {
+        child.acquire_inner_lock().clear_child_tid = ctid as usize;
+    }
     // add new task to scheduler
     add_task(child);
     new_pid as isize
@@ -846,7 +840,7 @@ pub fn sys_prlimit(
                     }
                 }
                 Resource::ILLEAGAL => return EINVAL,
-                _ => todo!(),
+                _ => return EINVAL,
             }
         }
         if !new_limit.is_null() {
@@ -868,11 +862,11 @@ pub fn sys_prlimit(
                     assert!(rlimit.rlim_cur <= USER_STACK_SIZE);
                 }
                 Resource::ILLEAGAL => return EINVAL,
-                _ => todo!(),
+                _ => return EINVAL,
             }
         }
     } else {
-        todo!();
+        return EINVAL;
     }
     SUCCESS
 }
@@ -1007,7 +1001,7 @@ pub fn sys_futex(
                 .wake_op(futex_word_addr, futex_word_addr_2, val, cond)
         }
         FutexCmd::Invalid => EINVAL,
-        _ => todo!(),
+        _ => ENOSYS,
     }
 }
 

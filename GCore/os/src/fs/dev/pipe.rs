@@ -11,6 +11,7 @@ use crate::timer::TimeSpec;
 use crate::{fs::file_trait::File, mm::UserBuffer};
 use alloc::boxed::Box;
 use alloc::sync::{Arc, Weak};
+use alloc::vec::Vec;
 use core::ptr::copy_nonoverlapping;
 use spin::Mutex;
 
@@ -160,7 +161,7 @@ pub fn make_pipe() -> (Arc<Pipe>, Arc<Pipe>) {
 #[allow(unused)]
 impl File for Pipe {
     fn deep_clone(&self) -> Arc<dyn File> {
-        todo!()
+        Arc::new(Pipe::read_end_with_buffer(self.buffer.clone()))
     }
 
     fn readable(&self) -> bool {
@@ -358,7 +359,7 @@ impl File for Pipe {
     }
 
     fn get_size(&self) -> usize {
-        todo!()
+        0
     }
 
     fn get_stat(&self) -> Stat {
@@ -379,16 +380,14 @@ impl File for Pipe {
         DiskInodeType::File
     }
 
-    fn info_dirtree_node(&self, dirnode_ptr: Weak<crate::fs::directory_tree::DirectoryTreeNode>) {
-        todo!()
-    }
+    fn info_dirtree_node(&self, dirnode_ptr: Weak<crate::fs::directory_tree::DirectoryTreeNode>) {}
 
     fn get_dirtree_node(&self) -> Option<Arc<DirectoryTreeNode>> {
-        todo!()
+        None
     }
 
     fn open(&self, flags: crate::fs::layout::OpenFlags, special_use: bool) -> Arc<dyn File> {
-        todo!()
+        self.deep_clone()
     }
 
     fn open_subfile(
@@ -398,22 +397,22 @@ impl File for Pipe {
     }
 
     fn create(&self, name: &str, file_type: DiskInodeType) -> Result<Arc<dyn File>, isize> {
-        todo!()
+        Err(EINVAL)
     }
 
     fn link_child(&self, name: &str, child: &Self) -> Result<(), isize>
     where
         Self: Sized,
     {
-        todo!()
+        Err(EINVAL)
     }
 
     fn unlink(&self, delete: bool) -> Result<(), isize> {
-        todo!()
+        Err(EINVAL)
     }
 
     fn get_dirent(&self, count: usize) -> alloc::vec::Vec<Dirent> {
-        todo!()
+        Vec::new()
     }
 
     fn lseek(&self, offset: isize, whence: crate::fs::SeekWhence) -> Result<usize, isize> {
@@ -421,23 +420,21 @@ impl File for Pipe {
     }
 
     fn modify_size(&self, diff: isize) -> Result<(), isize> {
-        todo!()
+        Ok(())
     }
 
     fn truncate_size(&self, new_size: usize) -> Result<(), isize> {
-        todo!()
+        Err(EINVAL)
     }
 
-    fn set_timestamp(&self, ctime: Option<usize>, atime: Option<usize>, mtime: Option<usize>) {
-        todo!()
-    }
+    fn set_timestamp(&self, ctime: Option<usize>, atime: Option<usize>, mtime: Option<usize>) {}
 
     fn get_single_cache(&self, offset: usize) -> Result<Arc<Mutex<crate::fs::PageCache>>, ()> {
-        todo!()
+        Err(())
     }
 
     fn get_all_caches(&self) -> Result<alloc::vec::Vec<Arc<Mutex<crate::fs::PageCache>>>, ()> {
-        todo!()
+        Err(())
     }
 
     fn oom(&self) -> usize {
@@ -456,44 +453,6 @@ impl File for Pipe {
     }
 
     fn fcntl(&self, cmd: u32, arg: u32) -> isize {
-        // use crate::config::PAGE_SIZE;
-        // use crate::syscall::fs::Fcntl_Command;
-        // match Fcntl_Command::from_primitive(cmd) {
-        //     Fcntl_Command::GETPIPE_SZ => self.buffer.lock().arr.len() as isize,
-        //     Fcntl_Command::SETPIPE_SZ => {
-        //         let new_size = (arg as usize).max(PAGE_SIZE);
-        //         let mut ring = self.buffer.lock();
-        //         let mut old_used_size = ring.get_used_size();
-        //         if new_size < old_used_size {
-        //             return EBUSY;
-        //         }
-        //         let mut new_buffer = Vec::<u8>::with_capacity(new_size);
-        //         while old_used_size > 0 {
-        //             let index = ring.head;
-        //             new_buffer.push(ring.arr[index]);
-        //             ring.head += 1;
-        //             if ring.head == ring.arr.len() {
-        //                 ring.head = 0;
-        //             }
-        //             old_used_size -= 1;
-        //         }
-        //         ring.head = 0;
-        //         ring.tail = new_buffer.len();
-        //         if ring.tail == 0 {
-        //             ring.status = RingBufferStatus::EMPTY;
-        //         } else if ring.tail != new_size {
-        //             ring.status = RingBufferStatus::NORMAL;
-        //         } else {
-        //             ring.status = RingBufferStatus::FULL;
-        //         }
-        //         unsafe {
-        //             new_buffer.set_len(new_size);
-        //         }
-        //         ring.arr = new_buffer;
-        //         SUCCESS
-        //     }
-        //     _ => EINVAL,
-        // }
-        todo!()
+        EINVAL
     }
 }

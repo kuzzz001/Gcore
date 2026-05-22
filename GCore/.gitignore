@@ -1,7 +1,6 @@
 .vscode
 
 os/target/
-
 os/qemu.log
 
 user/target/
@@ -10,14 +9,15 @@ fs-img-dir
 
 testsuits
 
-testresult
+testresult/
 
 kernel-la
-
 kernel-rv
 
 sdcard-la.img
-
 sdcard-rv.img
 
-
+*.swp
+*.swo
+*~
+.DS_Store

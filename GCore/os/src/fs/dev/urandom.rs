@@ -1,12 +1,13 @@
 use crate::fs::{dirent::Dirent, DiskInodeType};
 use crate::utils::random::RNG;
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 use rand_core::RngCore;
 
 use crate::{
     fs::{directory_tree::DirectoryTreeNode, file_trait::File, layout::Stat, StatMode},
     mm::UserBuffer,
-    syscall::errno::{ENOTDIR, ESPIPE},
+    syscall::errno::{EINVAL, ENOTDIR, ESPIPE},
 };
 
 pub struct Urandom;
@@ -31,7 +32,7 @@ impl File for Urandom {
     }
 
     fn write(&self, offset: Option<&mut usize>, buf: &[u8]) -> usize {
-        unreachable!()
+        buf.len()
     }
 
     fn r_ready(&self) -> bool {
@@ -43,7 +44,7 @@ impl File for Urandom {
     }
 
     fn get_size(&self) -> usize {
-        todo!()
+        0
     }
 
     fn get_stat(&self) -> Stat {
@@ -82,7 +83,7 @@ impl File for Urandom {
     }
 
     fn get_dirtree_node(&self) -> Option<Arc<DirectoryTreeNode>> {
-        todo!()
+        None
     }
 
     fn open(&self, flags: crate::fs::layout::OpenFlags, special_use: bool) -> Arc<dyn File> {
@@ -96,22 +97,22 @@ impl File for Urandom {
     }
 
     fn create(&self, name: &str, file_type: DiskInodeType) -> Result<Arc<dyn File>, isize> {
-        todo!()
+        Err(EINVAL)
     }
 
     fn link_child(&self, name: &str, child: &Self) -> Result<(), isize>
     where
         Self: Sized,
     {
-        todo!()
+        Err(EINVAL)
     }
 
     fn unlink(&self, delete: bool) -> Result<(), isize> {
-        todo!()
+        Err(EINVAL)
     }
 
     fn get_dirent(&self, count: usize) -> alloc::vec::Vec<Dirent> {
-        todo!()
+        Vec::new()
     }
 
     fn lseek(&self, offset: isize, whence: crate::fs::SeekWhence) -> Result<usize, isize> {
@@ -119,28 +120,26 @@ impl File for Urandom {
     }
 
     fn modify_size(&self, diff: isize) -> Result<(), isize> {
-        todo!()
+        Ok(())
     }
 
     fn truncate_size(&self, new_size: usize) -> Result<(), isize> {
-        todo!()
+        Err(EINVAL)
     }
 
-    fn set_timestamp(&self, ctime: Option<usize>, atime: Option<usize>, mtime: Option<usize>) {
-        todo!()
-    }
+    fn set_timestamp(&self, ctime: Option<usize>, atime: Option<usize>, mtime: Option<usize>) {}
 
     fn get_single_cache(
         &self,
         offset: usize,
     ) -> Result<Arc<spin::Mutex<crate::fs::PageCache>>, ()> {
-        todo!()
+        Err(())
     }
 
     fn get_all_caches(
         &self,
     ) -> Result<alloc::vec::Vec<Arc<spin::Mutex<crate::fs::PageCache>>>, ()> {
-        todo!()
+        Err(())
     }
 
     fn oom(&self) -> usize {
@@ -148,10 +147,10 @@ impl File for Urandom {
     }
 
     fn hang_up(&self) -> bool {
-        todo!()
+        false
     }
 
     fn fcntl(&self, cmd: u32, arg: u32) -> isize {
-        todo!()
+        EINVAL
     }
 }

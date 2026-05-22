@@ -20,7 +20,9 @@ use smoltcp::{
 
 use crate::mm::UserBuffer;
 use crate::fs::Stat;
+use crate::fs::StatMode;
 use crate::fs::DiskInodeType;
+use crate::syscall::errno::*;
 use alloc::sync::Weak;
 use crate::fs::directory_tree::DirectoryTreeNode;
 use alloc::vec::Vec;
@@ -302,7 +304,7 @@ impl Drop for TcpSocket {
 
 impl File for TcpSocket {
     fn deep_clone(&self) -> Arc<dyn File>{
-        todo!();
+        Arc::new(TcpSocket::new())
     }
     fn readable(&self) -> bool{
         true
@@ -356,42 +358,42 @@ impl File for TcpSocket {
         let buf = unsafe { core::slice::from_raw_parts_mut(buffers[0].as_mut_ptr() as *mut u8, buf.len as usize) };
         self.write(None, buf)
     }
-    fn get_size(&self) -> usize{todo!();}
-    fn get_stat(&self) -> Stat{todo!();}
-    fn get_file_type(&self) -> DiskInodeType{todo!();}
-    fn is_dir(&self) -> bool {todo!();}
-    fn is_file(&self) -> bool {todo!();}
-    fn info_dirtree_node(&self, _dirnode_ptr: Weak<DirectoryTreeNode>){todo!();}
-    fn get_dirtree_node(&self) -> Option<Arc<DirectoryTreeNode>>{todo!();}
-    /// open
-    fn open(&self, _flags: OpenFlags, _special_use: bool) -> Arc<dyn File>{todo!();}
-    fn open_subfile(&self) -> Result<Vec<(String, Arc<dyn File>)>, isize>{todo!();}
-    /// create
-    fn create(&self, _name: &str, _file_type: DiskInodeType) -> Result<Arc<dyn File>, isize>{todo!();}
-    fn link_child(&self, _name: &str, _child: &Self) -> Result<(), isize>{todo!();}
-    /// delete(unlink)
-    fn unlink(&self, _delete: bool) -> Result<(), isize>{todo!();}
-    /// dirent
-    fn get_dirent(&self, _count: usize) -> Vec<Dirent>{todo!();}
-    /// offset
-    fn get_offset(&self) -> usize {todo!();}
-    fn lseek(&self, _offset: isize, _whence: SeekWhence) -> Result<usize, isize>{todo!();}
-    /// size
-    fn modify_size(&self, _diff: isize) -> Result<(), isize>{todo!();}
-    fn truncate_size(&self, _new_size: usize) -> Result<(), isize>{todo!();}
-    // time
-    fn set_timestamp(&self, _ctime: Option<usize>, _atime: Option<usize>, _mtime: Option<usize>){todo!();}
-    /// cache
-    fn get_single_cache(&self, _offset: usize) -> Result<Arc<Mutex<PageCache>>, ()>{todo!();}
-    fn get_all_caches(&self) -> Result<Vec<Arc<Mutex<PageCache>>>, ()>{todo!();}
-    /// memory related
-    fn oom(&self) -> usize{todo!();}
-    /// poll, select related
-    fn hang_up(&self) -> bool{todo!();}
-    /// iotcl
-    fn ioctl(&self, _cmd: u32, _argp: usize) -> isize {todo!();}
-    /// fcntl
-    fn fcntl(&self, _cmd: u32, _arg: u32) -> isize{todo!();}
+    fn get_size(&self) -> usize{0}
+    fn get_stat(&self) -> Stat{
+        Stat::new(
+            crate::makedev!(0, 6),
+            1,
+            StatMode::S_IFSOCK.bits() | 0o666,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+        )
+    }
+    fn get_file_type(&self) -> DiskInodeType{DiskInodeType::File}
+    fn is_dir(&self) -> bool {false}
+    fn is_file(&self) -> bool {true}
+    fn info_dirtree_node(&self, _dirnode_ptr: Weak<DirectoryTreeNode>){}
+    fn get_dirtree_node(&self) -> Option<Arc<DirectoryTreeNode>>{None}
+    fn open(&self, _flags: OpenFlags, _special_use: bool) -> Arc<dyn File>{self.deep_clone()}
+    fn open_subfile(&self) -> Result<Vec<(String, Arc<dyn File>)>, isize>{Err(ENOTDIR)}
+    fn create(&self, _name: &str, _file_type: DiskInodeType) -> Result<Arc<dyn File>, isize>{Err(EINVAL)}
+    fn link_child(&self, _name: &str, _child: &Self) -> Result<(), isize>{Err(EINVAL)}
+    fn unlink(&self, _delete: bool) -> Result<(), isize>{Err(EINVAL)}
+    fn get_dirent(&self, _count: usize) -> Vec<Dirent>{Vec::new()}
+    fn get_offset(&self) -> usize {0}
+    fn lseek(&self, _offset: isize, _whence: SeekWhence) -> Result<usize, isize>{Err(ESPIPE)}
+    fn modify_size(&self, _diff: isize) -> Result<(), isize>{Ok(())}
+    fn truncate_size(&self, _new_size: usize) -> Result<(), isize>{Err(EINVAL)}
+    fn set_timestamp(&self, _ctime: Option<usize>, _atime: Option<usize>, _mtime: Option<usize>){}
+    fn get_single_cache(&self, _offset: usize) -> Result<Arc<Mutex<PageCache>>, ()>{Err(())}
+    fn get_all_caches(&self) -> Result<Vec<Arc<Mutex<PageCache>>>, ()>{Err(())}
+    fn oom(&self) -> usize{0}
+    fn hang_up(&self) -> bool{false}
+    fn ioctl(&self, _cmd: u32, _argp: usize) -> isize {ENOTTY}
+    fn fcntl(&self, _cmd: u32, _arg: u32) -> isize {EINVAL}
 
     
 }

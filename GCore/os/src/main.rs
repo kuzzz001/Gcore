@@ -1,26 +1,17 @@
 #![no_std]
 #![no_main]
-#![feature(linkage)]
 #![feature(asm_const)]
 #![feature(naked_functions)]
-#![feature(asm_experimental_arch)]
 #![feature(panic_info_message)]
 #![feature(alloc_error_handler)]
-#![feature(int_roundings)]
 #![feature(string_remove_matches)]
-#![allow(internal_features)]
-#![feature(lang_items)]
 #![feature(custom_test_frameworks)]
 #![test_runner(crate::test_runner)]
-#![feature(const_maybe_uninit_assume_init)]
+#![feature(lang_items)]
 #![feature(trait_upcasting)]
 #![feature(core_intrinsics)]
-#![allow(dead_code)]
-#![allow(unused_assignments)]
-#![allow(unused_variables)]
 pub use hal::config;
 extern crate alloc;
-extern crate core;
 
 #[macro_use]
 extern crate bitflags;
@@ -43,8 +34,6 @@ mod utils;
 use crate::config::DISK_IMAGE_BASE;
 use crate::hal::bootstrap_init;
 use crate::hal::machine_init;
-// #[cfg(feature = "loongarch64")]
-// core::arch::global_asm!(include_str!("hal/arch/loongarch64/entry.asm"));
 #[cfg(feature = "riscv")]
 core::arch::global_asm!(include_str!("hal/arch/riscv/entry.asm"));
 #[cfg(all(feature = "block_mem", feature = "loongarch64"))]
@@ -107,17 +96,11 @@ pub fn rust_main() -> ! {
     console::log_init();
     println!("[kernel] Console initialized.");
     mm::init();
-    utils::random::init_rng();
     println!("[kernel] Hello, world!");
-    // note that remap_test is currently NOT supported by LA64, for the whole kernel space is RW!
-    // #[cfg(feature = "riscv")]
-    // mm::remap_test();
 
     machine_init();
+    utils::random::init_rng();
 
-    //machine independent initialization
-    // use crate::drivers::block::block_device_test;
-    // block_device_test();
     fs::directory_tree::init_fs();
     net::config::init();
     #[cfg(feature = "block_virt")]

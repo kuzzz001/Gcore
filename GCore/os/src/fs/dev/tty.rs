@@ -8,6 +8,7 @@ use crate::hal::console_getchar;
 use crate::mm::{copy_from_user, copy_to_user};
 use crate::mm::{translated_ref, translated_refmut, UserBuffer};
 use crate::syscall::errno::*;
+use alloc::vec::Vec;
 
 use alloc::sync::Arc;
 use lazy_static::lazy_static;
@@ -210,7 +211,7 @@ impl File for Teletype {
     }
 
     fn get_size(&self) -> usize {
-        todo!()
+        0
     }
 
     fn get_stat(&self) -> Stat {
@@ -238,7 +239,7 @@ impl File for Teletype {
     }
 
     fn get_dirtree_node(&self) -> Option<Arc<DirectoryTreeNode>> {
-        todo!()
+        None
     }
 
     fn open(&self, flags: crate::fs::layout::OpenFlags, special_use: bool) -> Arc<dyn File> {
@@ -252,22 +253,22 @@ impl File for Teletype {
     }
 
     fn create(&self, name: &str, file_type: DiskInodeType) -> Result<Arc<dyn File>, isize> {
-        todo!()
+        Err(EINVAL)
     }
 
     fn link_child(&self, name: &str, child: &Self) -> Result<(), isize>
     where
         Self: Sized,
     {
-        todo!()
+        Err(EINVAL)
     }
 
     fn unlink(&self, delete: bool) -> Result<(), isize> {
-        todo!()
+        Err(EINVAL)
     }
 
     fn get_dirent(&self, count: usize) -> alloc::vec::Vec<Dirent> {
-        todo!()
+        Vec::new()
     }
 
     fn lseek(&self, offset: isize, whence: crate::fs::SeekWhence) -> Result<usize, isize> {
@@ -275,23 +276,21 @@ impl File for Teletype {
     }
 
     fn modify_size(&self, diff: isize) -> Result<(), isize> {
-        todo!()
+        Ok(())
     }
 
     fn truncate_size(&self, new_size: usize) -> Result<(), isize> {
-        todo!()
+        Err(EINVAL)
     }
 
-    fn set_timestamp(&self, ctime: Option<usize>, atime: Option<usize>, mtime: Option<usize>) {
-        todo!()
-    }
+    fn set_timestamp(&self, ctime: Option<usize>, atime: Option<usize>, mtime: Option<usize>) {}
 
     fn get_single_cache(&self, offset: usize) -> Result<Arc<Mutex<crate::fs::PageCache>>, ()> {
-        todo!()
+        Err(())
     }
 
     fn get_all_caches(&self) -> Result<alloc::vec::Vec<Arc<Mutex<crate::fs::PageCache>>>, ()> {
-        todo!()
+        Err(())
     }
 
     fn oom(&self) -> usize {
@@ -341,12 +340,12 @@ impl File for Teletype {
                 copy_from_user(token, argp as *mut WinSize, &mut inner.winsize);
                 SUCCESS
             }
-            _ => todo!(),
+            _ => EINVAL,
         }
     }
 
     fn fcntl(&self, cmd: u32, arg: u32) -> isize {
-        todo!()
+        EINVAL
     }
 }
 

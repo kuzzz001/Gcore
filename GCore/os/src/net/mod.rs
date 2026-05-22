@@ -83,12 +83,6 @@ impl dyn Socket {
                 if socket_type.contains(SocketType::SOCK_DGRAM) {
                     let socket = UdpSocket::new();
                     let socket = Arc::new(socket);
-                    // current_process().inner_handler(|proc| {
-                    //     let fd = proc.fd_table.alloc_fd()?;
-                    //     proc.fd_table.put(fd, FdInfo::new(socket.clone(), flags));
-                    //     proc.socket_table.insert(fd, socket);
-                    //     Ok(fd)
-                    // })
                     let current_tcb = current_task().unwrap();
                     let fd = current_tcb.files.lock().insert(FileDescriptor::new(false, false, socket.clone())).unwrap();
                     current_tcb.socket_table.lock().insert(fd, socket);
@@ -96,12 +90,6 @@ impl dyn Socket {
                 } else if socket_type.contains(SocketType::SOCK_STREAM) {
                     let socket = TcpSocket::new();
                     let socket = Arc::new(socket);
-                    // current_process().inner_handler(|proc| {
-                    //     let fd = proc.fd_table.alloc_fd()?;
-                    //     proc.fd_table.put(fd, FdInfo::new(socket.clone(), flags));
-                    //     proc.socket_table.insert(fd, socket);
-                    //     Ok(fd)
-                    // })
                     let current_tcb = current_task().unwrap();
                     let fd = current_tcb.files.lock().insert(FileDescriptor::new(false, false, socket.clone())).unwrap();
                     current_tcb.socket_table.lock().insert(fd, socket);
@@ -111,16 +99,16 @@ impl dyn Socket {
                 }
             }
             AF_UNIX => {
-                Ok(4)
-                // todo!()
-                // let socket = UnixSocket::new();
-                // let socket = Arc::new(Socket::UnixSocket(socket));
-                // current_process().inner_handler(|proc| {
-                //     let fd = proc.fd_table.alloc_fd()?;
-                //     proc.fd_table.put(fd, socket.clone());
-                //     proc.socket_table.insert(fd, socket);
-                //     Ok(fd)
-                // })
+                let socket_type = SocketType::from_bits(socket_type).ok_or(SyscallErr::EINVAL)?;
+                let base_type = socket_type & !SocketType::SOCK_CLOEXEC;
+                if base_type != SocketType::SOCK_STREAM && base_type != SocketType::SOCK_DGRAM {
+                    return Err(SyscallErr::EINVAL);
+                }
+                let (socket, _) = unix::make_unix_socket_pair(base_type);
+                let current_tcb = current_task().unwrap();
+                let fd = current_tcb.files.lock().insert(FileDescriptor::new(false, false, socket.clone())).unwrap();
+                current_tcb.socket_table.lock().insert(fd, socket);
+                Ok(fd)
             }
             _ => Err(SyscallErr::EINVAL),
         }
