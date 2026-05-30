@@ -763,7 +763,10 @@ pub fn sys_fstatat(dirfd: usize, path: *const u8, buf: *mut u8, flags: u32) -> i
 
     match file_descriptor.open(&path, OpenFlags::O_RDONLY, false) {
         Ok(file_descriptor) => {
-            if copy_to_user(token, &file_descriptor.get_stat(), buf as *mut Stat).is_err() {
+            let stat = file_descriptor.get_stat();
+            log::info!("[sys_fstatat] path={}, atime={}, mtime={}, ctime={}",
+                path, stat.get_atime(), stat.get_mtime(), stat.get_ctime());
+            if copy_to_user(token, &stat, buf as *mut Stat).is_err() {
                 log::error!("[sys_fstatat] Failed to copy to {:?}", buf);
                 return EFAULT;
             };
@@ -836,6 +839,8 @@ pub fn sys_fstat(fd: usize, statbuf: *mut u8) -> isize {
         log::error!("[sys_fstat] Failed to copy to {:?}", statbuf);
         return EFAULT;
     };
+    println!("[sys_fstat] fd={}, atime={}, mtime={}, ctime={}",
+        fd, file_descriptor.get_stat().get_atime(), file_descriptor.get_stat().get_mtime(), file_descriptor.get_stat().get_ctime());
     SUCCESS
 }
 
@@ -1268,7 +1273,9 @@ pub fn sys_utimensat(
         }
     }
 
+    println!("[utimensat] before set_timestamp: atime={:?}, mtime={:?}", atime, mtime);
     inode.set_timestamp(None, atime, mtime).unwrap();
+    println!("[utimensat] after set_timestamp");
     SUCCESS
 }
 
@@ -1369,7 +1376,6 @@ pub fn sys_fcntl(fd: usize, cmd: u32, arg: usize) -> isize {
                 Ok(file_descriptor) => file_descriptor,
                 Err(errno) => return errno,
             };
-            // Access control is not fully implemented
             let mut res = OpenFlags::O_RDWR.bits() as isize;
             if file_descriptor.get_nonblock() {
                 res |= OpenFlags::O_NONBLOCK.bits() as isize;

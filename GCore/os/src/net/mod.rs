@@ -44,6 +44,7 @@ bitflags! {
         const SOCK_DGRAM = 1 << 1;
         /// unused now
         const SOCK_CLOEXEC = 1 << 19;
+        const SOCK_NONBLOCK = 0x800;
     }
 }
 
@@ -74,24 +75,20 @@ impl dyn Socket {
         match domain as u16 {
             AF_INET | AF_INET6 => {
                 let socket_type = SocketType::from_bits(socket_type).ok_or(SyscallErr::EINVAL)?;
-                let flags = if socket_type.contains(SocketType::SOCK_CLOEXEC) {
-                    OpenFlags::O_RDWR | OpenFlags::O_CLOEXEC
-                } else {
-                    OpenFlags::O_RDWR
-                };
-                info!("[Socket::alloc] flags: {:?}", flags);
+                let cloexec = socket_type.contains(SocketType::SOCK_CLOEXEC);
+                let nonblock = socket_type.contains(SocketType::SOCK_NONBLOCK);
                 if socket_type.contains(SocketType::SOCK_DGRAM) {
                     let socket = UdpSocket::new();
                     let socket = Arc::new(socket);
                     let current_tcb = current_task().unwrap();
-                    let fd = current_tcb.files.lock().insert(FileDescriptor::new(false, false, socket.clone())).unwrap();
+                    let fd = current_tcb.files.lock().insert(FileDescriptor::new(cloexec, nonblock, socket.clone())).unwrap();
                     current_tcb.socket_table.lock().insert(fd, socket);
                     Ok(fd)
                 } else if socket_type.contains(SocketType::SOCK_STREAM) {
                     let socket = TcpSocket::new();
                     let socket = Arc::new(socket);
                     let current_tcb = current_task().unwrap();
-                    let fd = current_tcb.files.lock().insert(FileDescriptor::new(false, false, socket.clone())).unwrap();
+                    let fd = current_tcb.files.lock().insert(FileDescriptor::new(cloexec, nonblock, socket.clone())).unwrap();
                     current_tcb.socket_table.lock().insert(fd, socket);
                     Ok(fd)
                 } else {
@@ -100,13 +97,15 @@ impl dyn Socket {
             }
             AF_UNIX => {
                 let socket_type = SocketType::from_bits(socket_type).ok_or(SyscallErr::EINVAL)?;
-                let base_type = socket_type & !SocketType::SOCK_CLOEXEC;
+                let cloexec = socket_type.contains(SocketType::SOCK_CLOEXEC);
+                let nonblock = socket_type.contains(SocketType::SOCK_NONBLOCK);
+                let base_type = socket_type & !(SocketType::SOCK_CLOEXEC | SocketType::SOCK_NONBLOCK);
                 if base_type != SocketType::SOCK_STREAM && base_type != SocketType::SOCK_DGRAM {
                     return Err(SyscallErr::EINVAL);
                 }
                 let (socket, _) = unix::make_unix_socket_pair(base_type);
                 let current_tcb = current_task().unwrap();
-                let fd = current_tcb.files.lock().insert(FileDescriptor::new(false, false, socket.clone())).unwrap();
+                let fd = current_tcb.files.lock().insert(FileDescriptor::new(cloexec, nonblock, socket.clone())).unwrap();
                 current_tcb.socket_table.lock().insert(fd, socket);
                 Ok(fd)
             }

@@ -9,13 +9,14 @@ pub const USER_HEAP_SIZE: usize = PAGE_SIZE * 0x20;
 
 pub const KERNEL_STACK_SIZE: usize = PAGE_SIZE * 0x20;
 #[cfg(feature = "board_rvqemu")]
-pub const KERNEL_HEAP_SIZE: usize = PAGE_SIZE * 0x4000;
+pub const KERNEL_HEAP_SIZE: usize = PAGE_SIZE * 0x8000;
 #[cfg(feature = "board_fu740")]
 pub const KERNEL_HEAP_SIZE: usize = PAGE_SIZE * 0x2000;
 #[cfg(feature = "board_cv1811h")]
 pub const KERNEL_HEAP_SIZE: usize = PAGE_SIZE * 0x2000;
 pub const MMAP_BASE: usize = 0x6000_0000;
 pub const MMAP_END: usize = 0x8000_0000;
+pub const VDSO_BASE: usize = 0x3000_0000;
 pub const SKIP_NUM: usize = 2;
 
 // manually make usable memory space equal

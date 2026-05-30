@@ -626,7 +626,10 @@ impl MapArea {
         page_table: &mut T,
         vpn: VirtPageNum,
     ) -> Result<PhysPageNum, MemoryError> {
-        let old_frame = self.inner.remove_in_memory(&vpn).unwrap();
+        let old_frame = self
+            .inner
+            .remove_in_memory(&vpn)
+            .ok_or(MemoryError::NotMapped)?;
         if Arc::strong_count(&old_frame) == 1 {
             let old_ppn = old_frame.ppn;
             self.inner.alloc_in_memory(vpn, old_frame);

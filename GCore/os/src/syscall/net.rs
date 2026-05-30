@@ -34,7 +34,7 @@ pub fn sys_socket(domain: u32, socket_type: u32, protocol: u32) -> isize {
             sockfd as isize
         },
         Err(e) => {
-            info!("[sys_socket] new sockfd failed", );
+            info!("[sys_socket] new sockfd failed");
             -(e as isize)
         }
     };
@@ -96,6 +96,13 @@ pub  fn sys_accept(sockfd: u32, addr: usize, addrlen: usize) -> isize {
 
 pub  fn sys_connect(sockfd: u32, addr: usize, addrlen: u32) -> isize {
     let addr_buf = trans_ref!(addr, addrlen);
+    let task = current_task().unwrap();
+    let nonblock = task.files.lock().get_ref(sockfd as usize)
+        .map(|fd| fd.get_nonblock())
+        .unwrap_or(false);
+    if nonblock {
+        return EINPROGRESS;
+    }
     let socket = get_socket!(sockfd);
     match socket.connect(addr_buf) {
         Ok(v) => v as isize,
@@ -310,6 +317,8 @@ pub fn sys_socketpair(domain: u32, socket_type: u32, protocol: u32, sv: usize) -
         Some(t) => t,
         None => return EINVAL,
     };
+    let cloexec = socket_type.contains(SocketType::SOCK_CLOEXEC);
+    let nonblock = socket_type.contains(SocketType::SOCK_NONBLOCK);
     let base_type = if socket_type.contains(SocketType::SOCK_STREAM) {
         SocketType::SOCK_STREAM
     } else if socket_type.contains(SocketType::SOCK_DGRAM) {
@@ -320,8 +329,8 @@ pub fn sys_socketpair(domain: u32, socket_type: u32, protocol: u32, sv: usize) -
     let len = 2 * core::mem::size_of::<u32>();
     let sv = unsafe { core::slice::from_raw_parts_mut(sv as *mut u32, len) };
     let (socket1, socket2) = make_unix_socket_pair(base_type);
-    let fd1 = current_task().unwrap().files.lock().insert(FileDescriptor::new(false, false, socket1));
-    let fd2 = current_task().unwrap().files.lock().insert(FileDescriptor::new(false, false, socket2));
+    let fd1 = current_task().unwrap().files.lock().insert(FileDescriptor::new(cloexec, nonblock, socket1));
+    let fd2 = current_task().unwrap().files.lock().insert(FileDescriptor::new(cloexec, nonblock, socket2));
     sv[0] = fd1.unwrap() as u32;
     sv[1] = fd2.unwrap() as u32;
     info!("[sys_socketpair] new sv: {:?}", sv);

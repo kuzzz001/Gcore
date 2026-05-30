@@ -123,11 +123,12 @@ impl Socket for TcpSocket {
     fn connect<'a>(&'a self, addr_buf: &'a [u8]) -> crate::utils::error::SyscallRet {
         let remote_endpoint = address::endpoint(addr_buf)?;
         self._connect(remote_endpoint)?;
+        let mut retry_count = 0u32;
+        let max_retries = 1000;
         loop {
             let state = NET_INTERFACE.tcp_socket(self.socket_handler, |socket| socket.state());
             match state {
                 tcp::State::Closed => {
-                    // close but not already connect, retry
                     info!("[Tcp::connect] {} already closed, try again", self.socket_handler);
                     self._connect(remote_endpoint)?;
                 }
@@ -135,12 +136,14 @@ impl Socket for TcpSocket {
                     info!("[Tcp::connect] {} connected, state {:?}", self.socket_handler, state);
                     return Ok(0);
                 }
-                _ => {
-                    info!("[Tcp::connect] {} not connect yet, state {:?}", self.socket_handler, state);
-                }
+                _ => {}
+            }
+            retry_count += 1;
+            if retry_count >= max_retries {
+                info!("[Tcp::connect] {} timeout after {} retries, state {:?}", self.socket_handler, max_retries, state);
+                return Err(SyscallErr::ETIMEDOUT);
             }
             suspend_current_and_run_next();
-            // thread::sleep(Duration::from_secs(1));
         }
     }
     fn recv_buf_size(&self) -> usize {
@@ -243,6 +246,8 @@ impl TcpSocket {
         Ok(())
     }
     fn _accept(&self, nonblock: bool) -> GeneralRet<IpEndpoint> {
+        let mut retry_count = 0u32;
+        let max_retries = if nonblock { 1 } else { 1000 };
         loop {
             NET_INTERFACE.poll();
             let ret = NET_INTERFACE.tcp_socket(self.socket_handler, |socket| {
@@ -257,23 +262,20 @@ impl TcpSocket {
                     log::info!("[TcpAcceptFuture::poll] state become {:?}", socket.state());
                     return Ok(socket.remote_endpoint().unwrap());
                 }
-                // log::info!(
-                //     "[TcpAcceptFuture::poll] not syn yet, state {:?}",
-                //     socket.state()
-                // );
                 if nonblock {
-                    log::info!("[TcpAcceptFuture::poll] flags set nonblock");
                     return Err(SyscallErr::EAGAIN);
                 }
-                // 使用 continue 跳过当前循环并开始下一次迭代
                 return Err(SyscallErr::EAGAIN);
             });
             NET_INTERFACE.poll();
             match ret {
                 Ok(endpoint) => return GeneralRet::Ok(endpoint),
                 Err(SyscallErr::EAGAIN) => {
+                    retry_count += 1;
+                    if retry_count >= max_retries {
+                        return GeneralRet::Err(SyscallErr::EAGAIN);
+                    }
                     suspend_current_and_run_next();
-                    // 如果返回 EAGAIN 错误，继续循环
                     continue;
                 }
                 Err(err) => return GeneralRet::Err(err),

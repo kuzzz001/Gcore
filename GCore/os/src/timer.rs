@@ -354,13 +354,30 @@ fn parse_cmdline_boot_time(cmdline: &str) -> Option<u64> {
     None
 }
 
-
-const MTIME: *const u64 = 0x0200_BFF8 as *const u64; // RISC-V virt machine 默认 MTIME 地址
-
 pub struct MTime;
 
 impl TimeSource for MTime {
     fn uptime(&self) -> u64 {
-        unsafe { core::ptr::read_volatile(MTIME) / 100_0000 } // 100万tick = 1秒
+        let ticks = riscv::register::time::read() as u64;
+        let sec = ticks / 10_000_000;
+        sec
+    }
+}
+
+#[cfg(feature = "board_rvqemu")]
+const GOLDFISH_RTC_BASE: usize = 0x10_1000;
+
+#[cfg(feature = "board_rvqemu")]
+pub fn init_rtc_time() {
+    unsafe {
+        let time_low = core::ptr::read_volatile(GOLDFISH_RTC_BASE as *const u32);
+        let time_high = core::ptr::read_volatile((GOLDFISH_RTC_BASE + 4) as *const u32);
+        let nsec = ((time_high as u64) << 32) | (time_low as u64);
+        let unix_sec = nsec / 1_000_000_000;
+        let uptime = crate::timer::uptime();
+        if unix_sec > uptime {
+            BOOT_TIME_OFFSET.store(unix_sec - uptime, core::sync::atomic::Ordering::Relaxed);
+        }
+        println!("[init_rtc_time] unix_sec={}, uptime={}, offset={}", unix_sec, uptime, BOOT_TIME_OFFSET.load(core::sync::atomic::Ordering::Relaxed));
     }
 }

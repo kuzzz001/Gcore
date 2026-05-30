@@ -171,3 +171,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - 清理代码中的过时注释和遗留代码
 - 统一代码风格和命名规范
+
+### Phase 6 — ext4 时间戳溢出修复与 libctest 测试验证
+
+#### [WIP] ext4 时间戳 32 位溢出修复
+
+- **修复** `os/src/fs/ext4/layout.rs`：`Ext4OSInode::set_timestamp` 中的时间戳截断问题
+  - 当传入大于 `0xFFFFFFFF` 的时间戳（如 `4294967296 = 1LL<<32`）时，将低 32 位写入 `atime`/`mtime`/`ctime` 字段
+  - 将高 2 位（epoch bits）存入 `i_atime_extra`/`i_mtime_extra`/`i_ctime_extra` 的低 2 位中
+  - 修复 `Ext4OSInode::get_stat` 从 extra 字段还原完整 34 位时间戳
+
+- **添加调试日志**：
+  - `sys_utimensat`：打印收到的时间戳值
+  - `FileDescriptor::set_timestamp`：跟踪 atime/mtime 传入值
+  - `Ext4OSInode::set_timestamp`：打印写入前后的 atime 和 atime_extra
+  - `Ext4OSInode::get_stat`：打印读取的 atime 基础值、extra 值和组合后值
+  - `sys_fstat`：打印 fd 和 stat 中的 atime/mtime/ctime
+
+- **状态**：`utimensat` 系统调用已正确收到用户空间传入的 `4294967296`，但由于当前测试访问的是普通文件（非 ext4 分区文件），`ext4 get_stat` 日志未出现，需要进一步确认 fstat 路径
+
+#### VDSO 探索（研究性工作）
+
+- **调研** RISC-V VDSO 编译方案
+  - 尝试在 Docker 中安装 `gcc-riscv64-linux-gnu` 交叉编译器并编译最小 VDSO 共享库
+  - 提取 VDSO 二进制数据，评估嵌入内核的可行性
+
+#### libctest 测试结果基线
+
+- **执行** `mask=0x8`（libctest 组）批量测试
+  - 总通过数：**241** 个测例
+  - 总失败数：23 个唯一测例（部分在 musl 和 glibc 下各失败一次）
+  - 零内核 panic，所有失败均为功能性或信号异常
+
+- **失败分类**：
+  - **Pthread（6个）**：`pthread_cond`（段错误）、`pthread_cond_smasher`（超时/段错误）、`pthread_cancel`（超时）、`pthread_cancel_points`（段错误/状态码）、`pthread_once_deadlock`（段错误）、`sem_init`（段错误）
+  - **Socket（1个）**：`socket`（accept EAGAIN）
+  - **时间（2个）**：`utime`（32位时间戳溢出）、`clock_gettime`、`strftime`
+  - **Locale/编码（4个）**：`clocale_mbfuncs`、`mbc`、`swprintf`、`fnmatch`
+  - **输入解析（4个）**：`fscanf`、`fwscanf`、`sscanf`、`sscanf_long`
+  - **数字转换（2个）**：`strtol`、`wcstol`
+  - **TLS（2个）**：`tls_init`（段错误）、`tls_get_new_dtv`（段错误）
+  - **文件状态（1个）**：`stat`（ctime/mtime/atime 值异常）

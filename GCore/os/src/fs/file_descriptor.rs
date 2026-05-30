@@ -201,13 +201,16 @@ impl FileDescriptor {
         // todo: support ETXTBSY
         self.file.truncate_size(new_size as usize)
     }
+    #[inline(never)]
     pub fn set_timestamp(
         &self,
         ctime: Option<usize>,
         atime: Option<usize>,
         mtime: Option<usize>,
     ) -> Result<(), isize> {
+        println!("[fd set_timestamp] atime={:?}, mtime={:?}", atime, mtime);
         self.file.set_timestamp(ctime, atime, mtime);
+        println!("[fd set_timestamp] done");
         Ok(())
     }
     pub fn get_single_cache(&self, offset: usize) -> Result<Arc<Mutex<PageCache>>, ()> {

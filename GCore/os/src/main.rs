@@ -99,6 +99,9 @@ pub fn rust_main() -> ! {
     println!("[kernel] Hello, world!");
 
     machine_init();
+    timer::init_time_source(&timer::MTime);
+    #[cfg(feature = "board_rvqemu")]
+    timer::init_rtc_time();
     utils::random::init_rng();
 
     fs::directory_tree::init_fs();

@@ -438,7 +438,13 @@ impl File for FatOSInode {
             .modify_size_lock(&inode_lock, new_size as isize - old_size as isize, true);
         Ok(())
     }
+    #[inline(never)]
     fn set_timestamp(&self, ctime: Option<usize>, atime: Option<usize>, mtime: Option<usize>) {
+        println!("[fat_timestamp] ENTERED: atime={:?}, mtime={:?}", atime, mtime);
+        if atime == Some(4294967296) || mtime == Some(4294967296) {
+            println!("[fat_timestamp] PANIC due to large value");
+            panic!("set_timestamp called with 4294967296");
+        }
         let mut inode_time = self.inner.time();
         if let Some(ctime) = ctime {
             inode_time.set_create_time(ctime as u64);
@@ -449,6 +455,8 @@ impl File for FatOSInode {
         if let Some(mtime) = mtime {
             inode_time.set_modify_time(mtime as u64);
         }
+        println!("[FatOSInode::set_timestamp] AFTER SET stored: atime={}, mtime={}",
+            inode_time.access_time(), inode_time.modify_time());
     }
     fn get_single_cache(&self, offset: usize) -> Result<Arc<Mutex<PageCache>>, ()> {
         // 确保偏移量4KB对齐

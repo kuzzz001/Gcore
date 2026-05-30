@@ -21,3 +21,5 @@ sdcard-rv.img
 *.swo
 *~
 .DS_Store
+*.log
+*.so

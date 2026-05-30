@@ -243,11 +243,14 @@ pub fn sys_setitimer(
 }
 
 pub fn sys_gettimeofday(tv: *mut TimeVal, _tz: *mut TimeZone) -> isize {
-    // Timezone is currently NOT supported.
     if !tv.is_null() {
         let token = current_user_token();
-        let timeval = &TimeVal::now();
-        if copy_to_user(token, timeval, tv).is_err() {
+        let unix_ts = crate::timer::current_time();
+        let timeval = TimeVal {
+            tv_sec: unix_ts as usize,
+            tv_usec: 0,
+        };
+        if copy_to_user(token, &timeval, tv).is_err() {
             log::error!("[sys_gettimeofday] Failed to copy to {:?}", tv);
             return EFAULT;
         }
@@ -306,8 +309,12 @@ pub fn sys_getpid() -> isize {
 pub fn sys_getppid() -> isize {
     let task = current_task().unwrap();
     let inner = task.acquire_inner_lock();
-    let ppid = inner.parent.as_ref().unwrap().upgrade().unwrap().tgid;
-    ppid as isize
+    inner
+        .parent
+        .as_ref()
+        .and_then(|p| p.upgrade())
+        .map(|p| p.tgid as isize)
+        .unwrap_or(1)
 }
 
 pub fn sys_getuid() -> isize {
@@ -1091,12 +1098,19 @@ pub fn sys_mprotect(addr: usize, len: usize, prot: usize) -> isize {
 pub fn sys_clock_gettime(clk_id: usize, tp: *mut TimeSpec) -> isize {
     if !tp.is_null() {
         let token = current_user_token();
-        let timespec = &TimeSpec::now();
-        if copy_to_user(token, timespec, tp).is_err() {
-            log::error!("[sys_clock_gettime] Failed to copy to {:?}", tp);
-            return EFAULT;
+        let timespec = match clk_id {
+            0 => {
+                let unix_ts = crate::timer::current_time();
+                TimeSpec {
+                    tv_sec: unix_ts as usize,
+                    tv_nsec: 0,
+                }
+            }
+            _ => TimeSpec::now(),
         };
-        info!("[sys_clock_gettime] clk_id: {}, tp: {:?}", clk_id, timespec);
+        if let Err(e) = copy_to_user(token, &timespec, tp) {
+            return e;
+        };
     }
     SUCCESS
 }
