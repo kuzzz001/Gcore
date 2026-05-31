@@ -245,3 +245,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - CLOCK_MONOTONIC_RAW（4）：同上
   - CLOCK_REALTIME_COARSE（5）：秒级精度 Unix 时间戳
   - CLOCK_MONOTONIC_COARSE（6）：秒级精度单调时间
+
+#### 线程同步机制修复与更多 syscall 空桩
+
+- **修复 futex 线程间共享（`os/src/task/task.rs`）**：
+  - 根因：`clone()` 创建线程时，futex 队列仅通过 `CLONE_SYSVSEM` 共享，而非 `CLONE_THREAD`
+  - pthread_cond 和 sem_init 依赖于线程间共享同一个 futex 队列
+  - 修复：改为检查 `CLONE_THREAD` 标志，线程间共享 `Arc<Mutex<Futex>>`
+  - 预期：修复 pthread_cond_smasher 超时和 sem_init 段错误
+
+- **新增更多 syscall 空桩**：
+  - `sync`（81）：返回 SUCCESS — `os/src/syscall/fs.rs`
+  - `sched_setaffinity`（122）：返回 SUCCESS — 空实现
+  - `sched_getaffinity`（123）：返回空 CPU mask（所有 CPU 可用）
+  - `sched_get_priority_max`（125）：SCHED_FIFO/RR 返回 99
+  - `sched_get_priority_min`（126）：SCHED_FIFO/RR 返回 1
+  - `prctl`（167）：返回 SUCCESS — 用于进程控制和线程命名
+
+- **移除调试 println! 语句**：
+  - 移除 `trap/mod.rs` 中的 syscall 调试日志（clock_gettime 打印、ENOMEM 打印等）
+  - 移除 `fs/ext4/layout.rs` 中的 set_timestamp/get_stat 调试打印
+  - 移除 `fs/file_descriptor.rs` 中的 set_timestamp 调试打印
+  - 移除 `syscall/fs.rs` 中的 utimensat 调试打印

@@ -208,9 +208,7 @@ impl FileDescriptor {
         atime: Option<usize>,
         mtime: Option<usize>,
     ) -> Result<(), isize> {
-        println!("[fd set_timestamp] atime={:?}, mtime={:?}", atime, mtime);
         self.file.set_timestamp(ctime, atime, mtime);
-        println!("[fd set_timestamp] done");
         Ok(())
     }
     pub fn get_single_cache(&self, offset: usize) -> Result<Arc<Mutex<PageCache>>, ()> {

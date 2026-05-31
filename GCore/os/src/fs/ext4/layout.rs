@@ -390,7 +390,6 @@ impl File for Ext4OSInode {
         let atime = (inode_ref.inode.atime() as u64) | (((inode_ref.inode.i_atime_extra & 0x3) as u64) << 32);
         let mtime = (inode_ref.inode.mtime() as u64) | (((inode_ref.inode.i_mtime_extra & 0x3) as u64) << 32);
         let ctime = (inode_ref.inode.ctime() as u64) | (((inode_ref.inode.i_ctime_extra & 0x3) as u64) << 32);
-        println!("[ext4 get_stat] atime={}, atime_extra={}, combined={}", inode_ref.inode.atime(), inode_ref.inode.i_atime_extra, atime);
         // let now = get_time() / CLOCK_FREQ;
 
         let st_mod: u32 = {
@@ -746,7 +745,6 @@ impl File for Ext4OSInode {
     }
 
     fn set_timestamp(&self, ctime: Option<usize>, atime: Option<usize>, mtime: Option<usize>) {
-        println!("[ext4 set_timestamp] atime={:?}, mtime={:?}", atime, mtime);
         let mut inode_ref = self.inode.lock();
         if let Some(ct) = ctime {
             inode_ref.set_ctime((ct & 0xFFFFFFFF) as u32);
@@ -763,8 +761,6 @@ impl File for Ext4OSInode {
             let epoch = ((mt >> 32) & 0x3) as u32;
             inode_ref.inode.i_mtime_extra = (inode_ref.inode.i_mtime_extra & !0x3) | epoch;
         }
-        println!("[ext4 set_timestamp] done. atime={}, atime_extra={}",
-            inode_ref.inode.atime(), inode_ref.inode.i_atime_extra);
     }
 
     /// 获取单个缓存页

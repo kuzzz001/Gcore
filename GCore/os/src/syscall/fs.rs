@@ -908,6 +908,11 @@ pub fn sys_fsync(fd: usize) -> isize {
     SUCCESS
 }
 
+pub fn sys_sync() -> isize {
+    info!("[sys_sync] sync filesystem");
+    SUCCESS
+}
+
 pub fn sys_fchmodat() -> isize {
     ENOSYS
 }
@@ -1273,9 +1278,7 @@ pub fn sys_utimensat(
         }
     }
 
-    println!("[utimensat] before set_timestamp: atime={:?}, mtime={:?}", atime, mtime);
     inode.set_timestamp(None, atime, mtime).unwrap();
-    println!("[utimensat] after set_timestamp");
     SUCCESS
 }
 

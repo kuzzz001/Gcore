@@ -1264,3 +1264,48 @@ pub fn sys_kcmp(pid1: usize, pid2: usize, type_: usize, idx1: usize, idx2: usize
     trace!("[sys_kcmp] pid1={}, pid2={}, type={}", pid1, pid2, type_);
     ENOSYS
 }
+
+pub fn sys_sched_setaffinity(pid: usize, cpusetsize: usize, mask: *const u8) -> isize {
+    trace!("[sys_sched_setaffinity] pid={}, cpusetsize={}", pid, cpusetsize);
+    SUCCESS
+}
+
+pub fn sys_sched_getaffinity(pid: usize, cpusetsize: usize, mask: *mut u8) -> isize {
+    trace!("[sys_sched_getaffinity] pid={}, cpusetsize={}", pid, cpusetsize);
+    if mask.is_null() || cpusetsize == 0 {
+        return EINVAL;
+    }
+    let token = current_user_token();
+    let zero_mask = [0u8; 128];
+    let copy_size = core::cmp::min(cpusetsize, zero_mask.len());
+    let mut buffer = crate::mm::UserBuffer::new(
+        match crate::mm::translated_byte_buffer(token, mask, copy_size) {
+            Ok(buf) => buf,
+            Err(e) => return e,
+        }
+    );
+    buffer.write_at(0, &zero_mask[..copy_size]);
+    copy_size as isize
+}
+
+pub fn sys_sched_get_priority_max(policy: usize) -> isize {
+    trace!("[sys_sched_get_priority_max] policy={}", policy);
+    // SCHED_RR = 2, SCHED_FIFO = 1
+    match policy {
+        1 | 2 => 99,  // max real-time priority
+        _ => 0,
+    }
+}
+
+pub fn sys_sched_get_priority_min(policy: usize) -> isize {
+    trace!("[sys_sched_get_priority_min] policy={}", policy);
+    match policy {
+        1 | 2 => 1,   // min real-time priority
+        _ => 0,
+    }
+}
+
+pub fn sys_prctl(option: usize, arg2: usize, arg3: usize, arg4: usize, arg5: usize, arg6: usize) -> isize {
+    trace!("[sys_prctl] option={:#x}", option);
+    SUCCESS
+}

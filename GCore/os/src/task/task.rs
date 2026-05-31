@@ -612,10 +612,9 @@ impl TaskControlBlock {
             } else {
                 Arc::new(Mutex::new(self.sighand.lock().clone()))
             },
-            futex: if flags.contains(CloneFlags::CLONE_SYSVSEM) {
+            futex: if flags.contains(CloneFlags::CLONE_THREAD) {
                 self.futex.clone()
             } else {
-                // maybe should do clone here?
                 Arc::new(Mutex::new(Futex::new()))
             },
             inner: Mutex::new(TaskControlBlockInner {

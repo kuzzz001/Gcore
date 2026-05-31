@@ -79,30 +79,10 @@ pub fn trap_handler() -> ! {
             // jump to next instruction anyway
             let mut cx = current_trap_cx();
             cx.gp.pc += 4;
-            let a7_before = cx.gp.a7;
-            let a0_before = cx.gp.a0;
-            let a1_before = cx.gp.a1;
             let result = syscall(
                 cx.gp.a7,
                 [cx.gp.a0, cx.gp.a1, cx.gp.a2, cx.gp.a3, cx.gp.a4, cx.gp.a5],
             );
-            if a7_before == 113 {
-                let task = current_task().unwrap();
-                let token = task.get_user_token();
-                let tp = a1_before as *const crate::timer::TimeSpec;
-                let mut buf = crate::timer::TimeSpec::new();
-                if crate::mm::copy_from_user(token, tp, &mut buf).is_ok() {
-                    println!("[trap] clock_gettime: clk_id={}, result={}, tp={:#x}, [sec={}, nsec={}]", a0_before, result, a1_before, buf.tv_sec, buf.tv_nsec);
-                } else {
-                    println!("[trap] clock_gettime: clk_id={}, result={}, tp={:#x}, COPY_FROM_USER_FAILED", a0_before, result, a1_before);
-                }
-            }
-            if result == -12 {
-                println!("[trap] SYSCALL {} RETURNED ENOMEM: a0={:#x}, a1={:#x}", a7_before, a0_before, a1_before);
-            }
-            if result < 0 && a7_before != 113 && result != -12 {
-                println!("[trap] SYSCALL {} FAILED: a0={:#x}, result={}", a7_before, a0_before, result);
-            }
             // cx is changed during sys_exec, so we have to call it again
             cx = current_trap_cx();
             cx.gp.a0 = result as usize;
