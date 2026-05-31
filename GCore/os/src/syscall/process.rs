@@ -16,7 +16,7 @@ use crate::task::{
     procs_count, signal::*, suspend_current_and_run_next, threads, wait_with_timeout,
     wake_interruptible, Rusage, TaskStatus,
 };
-use crate::timer::{get_time_ms, get_time_sec, ITimerVal, TimeSpec, TimeVal, TimeZone, Times};
+use crate::timer::{get_time_ms, get_time_ns, get_time_sec, ITimerVal, NSEC_PER_SEC, TimeSpec, TimeVal, TimeZone, Times};
 use alloc::boxed::Box;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
@@ -1099,13 +1099,28 @@ pub fn sys_clock_gettime(clk_id: usize, tp: *mut TimeSpec) -> isize {
     if !tp.is_null() {
         let token = current_user_token();
         let timespec = match clk_id {
+            // CLOCK_REALTIME = 0: system-wide real-time clock
             0 => {
+                let unix_ts = crate::timer::current_time();
+                let ns = crate::timer::get_time_ns() % crate::timer::NSEC_PER_SEC;
+                TimeSpec {
+                    tv_sec: unix_ts as usize,
+                    tv_nsec: ns,
+                }
+            }
+            // CLOCK_MONOTONIC = 1, CLOCK_BOOTTIME = 7: unaffected by system time changes
+            1 | 7 => TimeSpec::now(),
+            // CLOCK_MONOTONIC_RAW = 4: raw hardware time
+            4 => TimeSpec::now(),
+            // CLOCK_REALTIME_COARSE = 5, CLOCK_MONOTONIC_COARSE = 6
+            5 => {
                 let unix_ts = crate::timer::current_time();
                 TimeSpec {
                     tv_sec: unix_ts as usize,
                     tv_nsec: 0,
                 }
             }
+            6 => TimeSpec::now(),
             _ => TimeSpec::now(),
         };
         if let Err(e) = copy_to_user(token, &timespec, tp) {
@@ -1223,4 +1238,29 @@ pub fn sys_getrusage(who: isize, usage: *mut Rusage) -> isize {
     };
     //info!("[sys_getrusage] who: RUSAGE_SELF, usage: {:?}", inner.rusage);
     SUCCESS
+}
+
+pub fn sys_mincore(addr: usize, length: usize, vec: *mut u8) -> isize {
+    trace!("[sys_mincore] addr={:#x}, length={:#x}, vec={:?}", addr, length, vec);
+    SUCCESS
+}
+
+pub fn sys_madvise(addr: usize, length: usize, advice: usize) -> isize {
+    trace!("[sys_madvise] addr={:#x}, length={:#x}, advice={}", addr, length, advice);
+    SUCCESS
+}
+
+pub fn sys_process_vm_readv(pid: usize, lvec: usize, liovcnt: usize, rvec: usize, riovcnt: usize, flags: usize) -> isize {
+    trace!("[sys_process_vm_readv] pid={}, flags={}", pid, flags);
+    ENOSYS
+}
+
+pub fn sys_process_vm_writev(pid: usize, lvec: usize, liovcnt: usize, rvec: usize, riovcnt: usize, flags: usize) -> isize {
+    trace!("[sys_process_vm_writev] pid={}, flags={}", pid, flags);
+    ENOSYS
+}
+
+pub fn sys_kcmp(pid1: usize, pid2: usize, type_: usize, idx1: usize, idx2: usize) -> isize {
+    trace!("[sys_kcmp] pid1={}, pid2={}, type={}", pid1, pid2, type_);
+    ENOSYS
 }

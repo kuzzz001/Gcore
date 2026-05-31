@@ -223,3 +223,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **数字转换（2个）**：`strtol`、`wcstol`
   - **TLS（2个）**：`tls_init`（段错误）、`tls_get_new_dtv`（段错误）
   - **文件状态（1个）**：`stat`（ctime/mtime/atime 值异常）
+
+#### 缺失 syscall 空桩添加与内核崩溃修复
+
+- **新增 syscall 空桩（mod.rs + process.rs）**：
+  - `mincore`（232）：返回 SUCCESS
+  - `madvise`（233）：返回 SUCCESS — 修复 libcbench 因 SIGSYS 导致的内核崩溃
+  - `process_vm_readv`（234）：返回 ENOSYS
+  - `process_vm_writev`（235）：返回 ENOSYS
+  - `kcmp`（236）：返回 ENOSYS — 修复 cyclictest 因 SIGSYS 导致的内核 StorePageFault panic
+
+- **根因分析**：未实现的 syscall 走 `_ =>` 默认路径，发送 SIGSYS 信号后在 `do_signal()` 中尝试传递信号时访问非法用户态地址，触发 `trap_from_kernel()` → StorePageFault panic
+
+- **修复 `os/src/task/manager.rs` — ActiveTracker 越界**：
+  - `mark_active`/`mark_inactive` 添加防御性边界检查
+  - 防止高 PID（≥128）在 `ensure_capacity` 后仍有竞争条件导致 bitmap 越界
+
+- **修复 `sys_clock_gettime` — 纳秒精度与 CLOCK_ID 支持**：
+  - CLOCK_REALTIME（0）：返回 Unix 时间戳，增加纳秒部分精度
+  - CLOCK_MONOTONIC（1）/CLOCK_BOOTTIME（7）：返回启动以来的时间（TimeSpec::now）
+  - CLOCK_MONOTONIC_RAW（4）：同上
+  - CLOCK_REALTIME_COARSE（5）：秒级精度 Unix 时间戳
+  - CLOCK_MONOTONIC_COARSE（6）：秒级精度单调时间

@@ -64,12 +64,18 @@ impl ActiveTracker {
     /// 标记指定pid的任务为激活状态
     pub fn mark_active(&mut self, pid: usize) {
         self.ensure_capacity(pid);
-        self.bitmap[pid / 64] |= 1 << (pid % 64)
+        let idx = pid / 64;
+        if idx < self.bitmap.len() {
+            self.bitmap[idx] |= 1 << (pid % 64)
+        }
     }
     /// 标记指定pid的任务为非激活状态
     pub fn mark_inactive(&mut self, pid: usize) {
         self.ensure_capacity(pid);
-        self.bitmap[pid / 64] &= !(1 << (pid % 64))
+        let idx = pid / 64;
+        if idx < self.bitmap.len() {
+            self.bitmap[idx] &= !(1 << (pid % 64))
+        }
     }
 }
 
