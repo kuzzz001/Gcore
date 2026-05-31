@@ -267,3 +267,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 移除 `fs/ext4/layout.rs` 中的 set_timestamp/get_stat 调试打印
   - 移除 `fs/file_descriptor.rs` 中的 set_timestamp 调试打印
   - 移除 `syscall/fs.rs` 中的 utimensat 调试打印
+
+#### OJ 评测系统适配 — kernel-rv 路径修复
+
+- **修复** `Makefile`（仓库根目录）：`make all` 构建后将 `GCore/kernel-rv` 复制到根目录
+  - 根因：OJ 平台的 QEMU 命令在仓库根目录执行，使用 `-kernel kernel-rv` 加载内核
+  - 但内核二进制文件被构建到 `GCore/kernel-rv`（来自 `GCore/os` 的 `cp ../kernel-rv`）
+  - 修复：在 `make all` 末尾添加 `cp -f GCore/kernel-rv ./kernel-rv`
+  - 同时为 `sdcard-rv.img` 创建符号链接（若存在则链接到 `GCore/sdcard-rv.img`）
+  - `make clean` 清理根目录下的 kernel-rv 和 sdcard-rv.img
