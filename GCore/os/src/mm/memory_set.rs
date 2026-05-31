@@ -36,9 +36,6 @@ lazy_static! {
         Arc::new(Mutex::new(MemorySet::new_kernel()));
 }
 
-#[cfg(feature = "riscv")]
-const VDSO_DATA: &[u8] = include_bytes!("../../vdso.so");
-
 /// Return the root PPN of kernel space
 pub fn kernel_token() -> usize {
     KERNEL_SPACE.lock().token()
@@ -484,47 +481,6 @@ impl<T: PageTable> MemorySet<T> {
         );
     }
 
-    #[cfg(feature = "riscv")]
-    fn map_vDSO(&mut self) {
-        use xmas_elf::program::Type as PhType;
-        let elf = xmas_elf::ElfFile::new(VDSO_DATA).expect("Invalid VDSO binary");
-        for ph in elf.program_iter() {
-            let ph_type = ph.get_type().unwrap();
-            if ph_type != PhType::Load {
-                continue;
-            }
-            let vaddr = ph.virtual_addr() as usize;
-            let filesz = ph.file_size() as usize;
-            let offset = ph.offset() as usize;
-            let flags = ph.flags();
-
-            let start_va = VDSO_BASE + vaddr;
-            let end_va = start_va + filesz;
-            let page_offset = start_va & (PAGE_SIZE - 1);
-
-            let mut map_perm =
-                MapPermission::U | MapPermission::R;
-            if flags.is_execute() {
-                map_perm |= MapPermission::X;
-            }
-            if flags.is_write() {
-                map_perm |= MapPermission::W;
-            }
-
-            let map_area = MapArea::new(
-                VirtAddr::from(start_va),
-                VirtAddr::from(end_va),
-                MapType::Framed,
-                map_perm,
-                None,
-            );
-
-            let data = &VDSO_DATA[offset..offset + filesz];
-            if let Err(_) = self.push_with_offset(map_area, page_offset, data) {
-                panic!("[map_vDSO] failed to map VDSO page");
-            }
-        }
-    }
     /// 创建一个空的内核空间
     /// Without kernel stacks. (Is it done with .bss?)
     pub fn new_kernel() -> Self {
@@ -728,9 +684,6 @@ impl<T: PageTable> MemorySet<T> {
         }
         // map signaltrampoline
         memory_set.map_signaltrampoline();
-        // map VDSO
-        #[cfg(feature = "riscv")]
-        memory_set.map_vDSO();
         let elf = xmas_elf::ElfFile::new(elf_data).unwrap();
         let (program_break, elf_info) = memory_set.map_elf(&elf)?;
 
@@ -1174,8 +1127,6 @@ impl<T: PageTable> MemorySet<T> {
                 AuxvType::EXECFN,
                 argv_user.first().copied().unwrap() as usize,
             ),
-            #[cfg(feature = "riscv")]
-            AuxvEntry::new(AuxvType::SYSINFO_EHDR, VDSO_BASE),
             AuxvEntry::new(AuxvType::NULL, 0),
         ];
         phys_user_sp -= auxv.len() * core::mem::size_of::<AuxvEntry>();

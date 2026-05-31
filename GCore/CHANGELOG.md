@@ -190,11 +190,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **状态**：`utimensat` 系统调用已正确收到用户空间传入的 `4294967296`，但由于当前测试访问的是普通文件（非 ext4 分区文件），`ext4 get_stat` 日志未出现，需要进一步确认 fstat 路径
 
-#### VDSO 探索（研究性工作）
+#### VDSO 探索（研究性工作 - 已移除）
 
 - **调研** RISC-V VDSO 编译方案
   - 尝试在 Docker 中安装 `gcc-riscv64-linux-gnu` 交叉编译器并编译最小 VDSO 共享库
   - 提取 VDSO 二进制数据，评估嵌入内核的可行性
+- **移除** `os/src/mm/memory_set.rs` 中的 `include_bytes!("../../vdso.so")` 及相关 `map_vDSO`、`SYSINFO_EHDR` 代码
+  - 原因：`vdso.so` 未提交到仓库，导致评测系统编译失败
+  - 一并移除 `os/src/hal/arch/riscv/config.rs` 中的 `VDSO_BASE` 常量
 
 #### libctest 测试结果基线
 
