@@ -1,0 +1,6 @@
+*.img
+*.img.xz
+*.log
+*.o
+*.bin
+vdso.so

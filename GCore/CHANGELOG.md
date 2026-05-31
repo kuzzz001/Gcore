@@ -276,3 +276,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 修复：在 `make all` 末尾添加 `cp -f GCore/kernel-rv ./kernel-rv`
   - **注意**：不要创建 `sdcard-rv.img`，OJ 平台有自己的镜像文件（`sdcard-rv.img.gz`），
     若存在同名文件会阻塞其解压过程导致 `gzip -d` 失败
+
+- **新增 `.gitignore`**：排除 `*.img`、`*.log`、`*.bin` 等构建产物，防止被误提交
