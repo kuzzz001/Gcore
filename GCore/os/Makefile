@@ -31,6 +31,7 @@ rv64-kernel-build-only:
 	@rustup override set nightly-2025-01-18-x86_64-unknown-linux-gnu
 	cp ./src/lang_items.rs.rv ./src/lang_items.rs
 	cp ../user/src/lang_items.rs.rv ../user/src/lang_items.rs
+	@cd ../user && make rust-user BOARD=rvqemu MODE=${MODE}
 	make -f make/rv64.mk build BLK_MODE=${BLK_MODE} MODE=${MODE} LOG=${LOG}
 
 rv64-debug:

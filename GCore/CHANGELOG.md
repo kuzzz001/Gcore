@@ -174,6 +174,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Phase 6 — ext4 时间戳溢出修复与 libctest 测试验证
 
+#### 评测系统构建修复
+
+- **修复** `os/Makefile`：`rv64-kernel-build-only` 目标缺少用户程序构建步骤
+  - 根因：`preload_app-rv.S` 通过 `.incbin` 将 `initproc` 嵌入内核，但 `rv64-kernel-build-only` 只编译内核
+  - 导致评测系统报错：`Could not find incbin file '../user/target/riscv64gc-unknown-none-elf/release/initproc'`
+  - 修复：在编译内核前添加 `@cd ../user && make rust-user BOARD=rvqemu MODE=${MODE}`
+  - 注意：该步骤会在每次构建时重新编译用户程序，但确保 `.incbin` 所需的 `initproc` 文件存在
+
 #### [WIP] ext4 时间戳 32 位溢出修复
 
 - **修复** `os/src/fs/ext4/layout.rs`：`Ext4OSInode::set_timestamp` 中的时间戳截断问题
