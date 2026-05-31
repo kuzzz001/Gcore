@@ -1292,9 +1292,8 @@ pub fn sys_sched_getaffinity(pid: usize, cpusetsize: usize, mask: *mut u8) -> is
 
 pub fn sys_sched_get_priority_max(policy: usize) -> isize {
     trace!("[sys_sched_get_priority_max] policy={}", policy);
-    // SCHED_RR = 2, SCHED_FIFO = 1
     match policy {
-        1 | 2 => 99,  // max real-time priority
+        1 | 2 => 99,
         _ => 0,
     }
 }
@@ -1302,7 +1301,7 @@ pub fn sys_sched_get_priority_max(policy: usize) -> isize {
 pub fn sys_sched_get_priority_min(policy: usize) -> isize {
     trace!("[sys_sched_get_priority_min] policy={}", policy);
     match policy {
-        1 | 2 => 1,   // min real-time priority
+        1 | 2 => 1,
         _ => 0,
     }
 }
