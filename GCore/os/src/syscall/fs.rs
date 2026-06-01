@@ -750,6 +750,26 @@ pub fn sys_fstatat(dirfd: usize, path: *const u8, buf: *mut u8, flags: u32) -> i
     );
 
     let task = current_task().unwrap();
+
+    if flags.contains(FstatatFlags::AT_EMPTY_PATH) && path.is_empty() {
+        let file_descriptor = match dirfd {
+            AT_FDCWD => task.fs.lock().working_inode.as_ref().clone(),
+                fd => {
+                    let fd_table = task.files.lock();
+                    match fd_table.get_ref(fd) {
+                        Ok(file_descriptor) => file_descriptor.clone(),
+                        Err(errno) => return errno,
+                    }
+                }
+            };
+            let stat = file_descriptor.get_stat();
+            if copy_to_user(token, &stat, buf as *mut Stat).is_err() {
+                log::error!("[sys_fstatat] Failed to copy to {:?}", buf);
+                return EFAULT;
+            };
+            return SUCCESS;
+        }
+      
     let file_descriptor = match dirfd {
         AT_FDCWD => task.fs.lock().working_inode.as_ref().clone(),
         fd => {

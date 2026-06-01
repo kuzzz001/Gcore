@@ -245,10 +245,12 @@ pub fn sys_setitimer(
 pub fn sys_gettimeofday(tv: *mut TimeVal, _tz: *mut TimeZone) -> isize {
     if !tv.is_null() {
         let token = current_user_token();
-        let unix_ts = crate::timer::current_time();
+        let uptime_us = crate::timer::get_time_us();
+        let boot_offset = crate::timer::current_time() - crate::timer::uptime();
+        let unix_us = uptime_us + boot_offset as usize * 1_000_000;
         let timeval = TimeVal {
-            tv_sec: unix_ts as usize,
-            tv_usec: 0,
+            tv_sec: unix_us / 1_000_000,
+            tv_usec: unix_us % 1_000_000,
         };
         if copy_to_user(token, &timeval, tv).is_err() {
             log::error!("[sys_gettimeofday] Failed to copy to {:?}", tv);
