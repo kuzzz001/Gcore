@@ -278,3 +278,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     若存在同名文件会阻塞其解压过程导致 `gzip -d` 失败
 
 - **新增 `.gitignore`**：排除 `*.img`、`*.log`、`*.bin` 等构建产物，防止被误提交
+
+#### LA64 构建修复 — la64-kernel-build-only 使用错误的 makefile
+
+- **根因**：`os/Makefile` 中的 `la64-kernel-build-only` 目标使用 `make/la64o.mk`（2k1000 物理板），
+  但 OJ 评测环境需要 `make/la64.mk`（QEMU 虚拟环境）
+  - `la64o.mk` 使用 `loongarch64-unknown-linux-gnu` 目标 + 系统 `objcopy`，在 OJ 上不可用
+  - `la64.mk` 使用 `loongarch64-unknown-none` 目标 + `rust-objcopy`（llvm-tools），在 OJ 上可用
+- **修复**：将 `make/la64o.mk` 改为 `make/la64.mk`
+- **顶层 Makefile**：`make all` 同时构建 rv64 和 la64，并将 `kernel-la` 复制到仓库根目录
