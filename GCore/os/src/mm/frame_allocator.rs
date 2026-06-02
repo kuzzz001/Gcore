@@ -138,22 +138,15 @@ impl FrameAllocator for StackFrameAllocator {
 }
 
 impl StackFrameAllocator {
-    /// 分配连续物理页（跳过回收列表，直接从current分配）
-    fn alloc_contiguous(&mut self, num: usize) -> Option<Vec<FrameTracker>> {
+    /// 分配连续物理页（跳过回收列表，直接从current分配），返回起始 PPN
+    fn alloc_contiguous(&mut self, num: usize) -> Option<usize> {
         if self.end - self.current < num {
             return None;
         }
         let start = self.current;
+        // 跳过清零以节省时间（调用者使用页面时会自行处理）
         self.current += num;
-        let mut frames = Vec::with_capacity(num);
-        for i in 0..num {
-            #[cfg(not(feature = "zero_init"))]
-            let ft = FrameTracker::new((start + i).into());
-            #[cfg(feature = "zero_init")]
-            let ft = unsafe { FrameTracker::new_uninit((start + i).into()) };
-            frames.push(ft);
-        }
-        Some(frames)
+        Some(start)
     }
 }
 
@@ -253,10 +246,17 @@ pub fn frames_alloc(num: usize) -> Option<Vec<Arc<FrameTracker>>> {
     Some(frames)
 }
 
-/// 分配连续物理页（跳过回收列表，直接从current分配）
-pub fn frames_alloc_contiguous(num: usize) -> Option<Vec<Arc<FrameTracker>>> {
-    let frames = FRAME_ALLOCATOR.write().alloc_contiguous(num)?;
-    Some(frames.into_iter().map(|f| Arc::new(f)).collect())
+/// 分配连续物理页（跳过回收列表，直接从current分配），返回起始 PPN
+pub fn frames_alloc_contiguous_raw(num: usize) -> Option<usize> {
+    FRAME_ALLOCATOR.write().alloc_contiguous(num)
+}
+
+/// 释放连续物理页（通过 PPN 直接释放，不经过 FrameTracker）
+pub fn frames_dealloc_contiguous(start_ppn: usize, num_pages: usize) {
+    let mut allocator = FRAME_ALLOCATOR.write();
+    for i in 0..num_pages {
+        allocator.dealloc(PhysPageNum(start_ppn + i));
+    }
 }
 
 #[cfg(not(feature = "oom_handler"))]

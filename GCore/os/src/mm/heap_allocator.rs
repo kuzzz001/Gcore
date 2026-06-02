@@ -1,22 +1,12 @@
 use crate::hal::KERNEL_HEAP_SIZE;
 use buddy_system_allocator::LockedHeap;
 use core::alloc::{GlobalAlloc, Layout};
-use alloc::collections::BTreeMap;
-use alloc::sync::Arc;
-use alloc::vec::Vec;
-use lazy_static::*;
 use spin::Mutex;
 
-// The buddy allocator for small allocations
+/// The buddy allocator for small allocations
 static BUDDY_ALLOC: LockedHeap<32> = LockedHeap::empty();
 
-// Track large page-based allocations (key = virtual address)
-lazy_static! {
-    static ref LARGE_ALLOCS: Mutex<BTreeMap<usize, Vec<Arc<super::FrameTracker>>>> =
-        Mutex::new(BTreeMap::new());
-}
-
-// Global heap memory space for the buddy allocator
+/// Global heap memory space for the buddy allocator
 static mut HEAP_SPACE: [u8; KERNEL_HEAP_SIZE] = [0; KERNEL_HEAP_SIZE];
 
 /// Initialize the kernel heap
@@ -27,6 +17,29 @@ pub fn init_heap() {
             .init(HEAP_SPACE.as_ptr() as usize, KERNEL_HEAP_SIZE);
     }
 }
+
+const PAGE_SIZE: usize = 0x1000;
+
+/// Maximum number of large allocations tracked simultaneously.
+/// Each entry is 16 bytes (2 × usize). 1024 entries = 16KB.
+const MAX_LARGE_ALLOCS: usize = 1024;
+
+/// Static table for tracking large page-based allocations.
+/// Uses pre-allocated arrays — NEVER allocates from the heap,
+/// avoiding circular dependency in the global allocator.
+///
+/// `vaddrs[i] == 0` means slot is empty (vaddr 0 is never valid in our system).
+struct LargeAllocTable {
+    vaddrs: [usize; MAX_LARGE_ALLOCS],
+    num_pages: [usize; MAX_LARGE_ALLOCS],
+}
+
+const EMPTY_TABLE: LargeAllocTable = LargeAllocTable {
+    vaddrs: [0; MAX_LARGE_ALLOCS],
+    num_pages: [0; MAX_LARGE_ALLOCS],
+};
+
+static LARGE_ALLOCS: Mutex<LargeAllocTable> = Mutex::new(EMPTY_TABLE);
 
 struct KernelAllocator;
 
@@ -39,12 +52,20 @@ unsafe impl GlobalAlloc for KernelAllocator {
         }
 
         // Fallback: use page allocator for allocations >= PAGE_SIZE
-        const PAGE_SIZE: usize = 0x1000;
         if layout.size() >= PAGE_SIZE {
             let num_pages = (layout.size() + PAGE_SIZE - 1) / PAGE_SIZE;
-            if let Some(frames) = super::frames_alloc_contiguous(num_pages) {
-                let vaddr = frames[0].ppn.0 * PAGE_SIZE;
-                LARGE_ALLOCS.lock().insert(vaddr, frames);
+            if let Some(start_ppn) = super::frames_alloc_contiguous_raw(num_pages) {
+                let vaddr = start_ppn * PAGE_SIZE;
+                // Track in the static table (no heap allocation needed)
+                let mut table = LARGE_ALLOCS.lock();
+                for i in 0..MAX_LARGE_ALLOCS {
+                    if table.vaddrs[i] == 0 {
+                        table.vaddrs[i] = vaddr;
+                        table.num_pages[i] = num_pages;
+                        return vaddr as *mut u8;
+                    }
+                }
+                // Table full — leak the pages but system keeps running
                 return vaddr as *mut u8;
             }
         }
@@ -55,13 +76,16 @@ unsafe impl GlobalAlloc for KernelAllocator {
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         let addr = ptr as usize;
         // Check if this is a page-allocated block
-        let frames = LARGE_ALLOCS.lock().remove(&addr);
-        if let Some(frames) = frames {
-            // Drop frames AFTER releasing the BTreeMap lock to avoid deadlock
-            // (FrameTracker drop takes FRAME_ALLOCATOR write lock)
-            drop(frames);
-            return;
+        let mut table = LARGE_ALLOCS.lock();
+        for i in 0..MAX_LARGE_ALLOCS {
+            if table.vaddrs[i] == addr {
+                // Free the contiguous pages back to the frame allocator
+                super::frames_dealloc_contiguous(addr / PAGE_SIZE, table.num_pages[i]);
+                table.vaddrs[i] = 0;
+                return;
+            }
         }
+        drop(table);
 
         // Buddy allocator dealloc
         BUDDY_ALLOC.dealloc(ptr, layout);
