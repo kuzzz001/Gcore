@@ -952,6 +952,26 @@ pub fn sys_fchmodat() -> isize {
     ENOSYS
 }
 
+pub fn sys_fallocate(fd: usize, mode: usize, offset: usize, len: usize) -> isize {
+    trace!("[sys_fallocate] fd={}, mode={}, offset={:#x}, len={}", fd, mode, offset, len);
+    SUCCESS
+}
+
+pub fn sys_flock(fd: usize, operation: usize) -> isize {
+    trace!("[sys_flock] fd={}, op={}", fd, operation);
+    SUCCESS
+}
+
+pub fn sys_fchown(fd: usize, owner: usize, group: usize) -> isize {
+    trace!("[sys_fchown] fd={}, owner={}, group={}", fd, owner, group);
+    SUCCESS
+}
+
+pub fn sys_fchownat(dirfd: usize, path: *const u8, owner: usize, group: usize, flags: usize) -> isize {
+    trace!("[sys_fchownat] dirfd={}, owner={}, group={}, flags={}", dirfd, owner, group, flags);
+    SUCCESS
+}
+
 pub fn sys_chdir(path: *const u8) -> isize {
     let task = current_task().unwrap();
     let token = task.get_user_token();

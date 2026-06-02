@@ -1262,6 +1262,79 @@ pub fn sys_process_vm_writev(pid: usize, lvec: usize, liovcnt: usize, rvec: usiz
     ENOSYS
 }
 
+pub fn sys_sched_setparam(pid: usize, param: *const u8) -> isize {
+    trace!("[sys_sched_setparam] pid={}", pid);
+    SUCCESS
+}
+
+pub fn sys_sched_setscheduler(pid: usize, policy: usize, param: *const u8) -> isize {
+    trace!("[sys_sched_setscheduler] pid={}, policy={}", pid, policy);
+    SUCCESS
+}
+
+pub fn sys_sched_getscheduler(pid: usize) -> isize {
+    trace!("[sys_sched_getscheduler] pid={}", pid);
+    0 // SCHED_OTHER
+}
+
+pub fn sys_sched_getparam(pid: usize, param: *mut u8) -> isize {
+    trace!("[sys_sched_getparam] pid={}", pid);
+    SUCCESS
+}
+
+pub fn sys_sched_rr_get_interval(pid: usize, tp: *mut u8) -> isize {
+    trace!("[sys_sched_rr_get_interval] pid={}", pid);
+    EINVAL // not real-time
+}
+
+pub fn sys_setpriority(which: usize, who: usize, prio: usize) -> isize {
+    trace!("[sys_setpriority] which={}, who={}, prio={}", which, who, prio);
+    SUCCESS
+}
+
+pub fn sys_getpriority(which: usize, who: usize) -> isize {
+    trace!("[sys_getpriority] which={}, who={}", which, who);
+    20 // default nice value
+}
+
+pub fn sys_getgroups(size: i32, list: *mut u32) -> isize {
+    trace!("[sys_getgroups] size={}", size);
+    // Return single group 0 (root)
+    if size < 1 {
+        return 1; // return number of groups
+    }
+    let token = current_user_token();
+    let gid: u32 = 0;
+    unsafe { (list as *mut u32).write_volatile(gid) };
+    1
+}
+
+pub fn sys_setgroups(size: usize, list: *const u32) -> isize {
+    trace!("[sys_setgroups] size={}", size);
+    SUCCESS
+}
+
+pub fn sys_getrlimit(resource: usize, rlim: *mut u8) -> isize {
+    trace!("[sys_getrlimit] resource={}", resource);
+    SUCCESS
+}
+
+pub fn sys_setrlimit(resource: usize, rlim: *const u8) -> isize {
+    trace!("[sys_setrlimit] resource={}", resource);
+    SUCCESS
+}
+
+pub fn sys_rt_sigpending(set: *mut u8, sigsetsize: usize) -> isize {
+    trace!("[sys_rt_sigpending] sigsetsize={}", sigsetsize);
+    SUCCESS
+}
+
+pub fn sys_waitid(idtype: usize, id: usize, infop: *mut u8, options: usize, rusage: *mut u8) -> isize {
+    trace!("[sys_waitid] idtype={}, id={}, options={}", idtype, id, options);
+    // Fall back to wait4
+    crate::syscall::process::sys_wait4(id as isize, infop as *mut u32, options as u32, rusage as *mut crate::task::Rusage)
+}
+
 pub fn sys_kcmp(pid1: usize, pid2: usize, type_: usize, idx1: usize, idx2: usize) -> isize {
     trace!("[sys_kcmp] pid1={}, pid2={}, type={}", pid1, pid2, type_);
     // Return 0 (equal) - enough for cyclictest/hackbench to proceed

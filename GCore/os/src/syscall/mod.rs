@@ -25,6 +25,8 @@ pub fn syscall_name(id: usize) -> &'static str {
         SYSCALL_GETCWD => "getcwd",
         SYSCALL_FCNTL => "fcntl",
         SYSCALL_IOCTL => "ioctl",
+        SYSCALL_FLOCK => "flock",
+        SYSCALL_MKNODAT => "mknodat",
         SYSCALL_MKDIRAT => "mkdirat",
         SYSCALL_UNLINKAT => "unlinkat",
         SYSCALL_LINKAT => "linkat",
@@ -52,6 +54,7 @@ pub fn syscall_name(id: usize) -> &'static str {
         SYSCALL_FSTAT => "fstat",
         SYSCALL_STATFS => "statfs",
         SYSCALL_FTRUNCATE => "ftruncate",
+        SYSCALL_FALLOCATE => "fallocate",
         SYSCALL_SYNC => "sync",
         SYSCALL_FSYNC => "fsync",
         SYSCALL_FDATASYNC => "fdatasync",
@@ -60,8 +63,10 @@ pub fn syscall_name(id: usize) -> &'static str {
         SYSCALL_TIMERFD_SETTIME => "timerfd_settime",
         SYSCALL_TIMERFD_GETTIME => "timerfd_gettime",
         SYSCALL_UTIMENSAT => "utimensat",
+        SYSCALL_PERSONALITY => "personality",
         SYSCALL_EXIT => "exit",
         SYSCALL_EXIT_GROUP => "exit_GROUP",
+        SYSCALL_WAITID => "waitid",
         SYSCALL_SET_TID_ADDRESS => "set_tid_address",
         SYSCALL_FUTEX => "futex",
         SYSCALL_SET_ROBUST_LIST => "set_robust_list",
@@ -72,24 +77,39 @@ pub fn syscall_name(id: usize) -> &'static str {
         SYSCALL_CLOCK_GETTIME => "clock_gettime",
         SYSCALL_CLOCK_NANOSLEEP => "clock_nanosleep",
         SYSCALL_SYSLOG => "syslog",
-        SYSCALL_YIELD => "yield",
+        SYSCALL_SCHED_SETPARAM => "sched_setparam",
+        SYSCALL_SCHED_SETSCHEDULER => "sched_setscheduler",
+        SYSCALL_SCHED_GETSCHEDULER => "sched_getscheduler",
+        SYSCALL_SCHED_GETPARAM => "sched_getparam",
         SYSCALL_SCHED_SETAFFINITY => "sched_setaffinity",
         SYSCALL_SCHED_GETAFFINITY => "sched_getaffinity",
+        SYSCALL_YIELD => "yield",
         SYSCALL_SCHED_GET_PRIORITY_MAX => "sched_get_priority_max",
         SYSCALL_SCHED_GET_PRIORITY_MIN => "sched_get_priority_min",
+        SYSCALL_SCHED_RR_GET_INTERVAL => "sched_rr_get_interval",
         SYSCALL_PRCTL => "prctl",
         SYSCALL_KILL => "kill",
         SYSCALL_TKILL => "tkill",
         SYSCALL_TGKILL => "tgkill",
+        SYSCALL_SIGALTSTACK => "sigaltstack",
+        SYSCALL_RT_SIGSUSPEND => "rt_sigsuspend",
         SYSCALL_SIGACTION => "sigaction",
         SYSCALL_SIGPROCMASK => "sigprocmask",
+        SYSCALL_RT_SIGPENDING => "rt_sigpending",
         SYSCALL_SIGTIMEDWAIT => "sigtimedwait",
+        SYSCALL_RT_SIGQUEUEINFO => "rt_sigqueueinfo",
         SYSCALL_SIGRETURN => "sigreturn",
+        SYSCALL_SETPRIORITY => "setpriority",
+        SYSCALL_GETPRIORITY => "getpriority",
         SYSCALL_TIMES => "times",
         SYSCALL_SETPGID => "setpgid",
         SYSCALL_GETPGID => "getpgid",
         SYSCALL_SETSID => "setsid",
+        SYSCALL_GETGROUPS => "getgroups",
+        SYSCALL_SETGROUPS => "setgroups",
         SYSCALL_UNAME => "uname",
+        SYSCALL_GETRLIMIT => "getrlimit",
+        SYSCALL_SETRLIMIT => "setrlimit",
         SYSCALL_GETRUSAGE => "getrusage",
         SYSCALL_UMASK => "umask",
         SYSCALL_GET_TIME_OF_DAY => "get_time_of_day",
@@ -236,6 +256,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         ),
         SYSCALL_FSTAT => sys_fstat(args[0], args[1] as *mut u8),
         SYSCALL_FTRUNCATE => sys_ftruncate(args[0], args[1] as isize),
+        SYSCALL_FALLOCATE => 0,
         SYSCALL_FSYNC => sys_fsync(args[0]),
         SYSCALL_SYNC => sys_sync(),
         SYSCALL_FDATASYNC => sys_fsync(args[0]),
@@ -251,6 +272,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         ),
         SYSCALL_EXIT => sys_exit(args[0] as u32),
         SYSCALL_EXIT_GROUP => sys_exit_group(args[0] as u32),
+        SYSCALL_WAITID => sys_waitid(args[0], args[1], args[2] as *mut u8, args[3], args[4] as *mut u8),
         SYSCALL_CLOCK_GETTIME => sys_clock_gettime(args[0], args[1] as *mut TimeSpec),
         SYSCALL_CLOCK_NANOSLEEP => sys_clock_nanosleep(
             args[0] as usize,
@@ -263,15 +285,23 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_TGKILL => sys_tgkill(args[0], args[1], args[2]),
         SYSCALL_SYSLOG => sys_syslog(args[0] as u32, args[1] as *mut u8, args[2] as u32),
         SYSCALL_YIELD => sys_yield(),
+        SYSCALL_SCHED_SETPARAM => sys_sched_setparam(args[0], args[1] as *const u8),
+        SYSCALL_SCHED_SETSCHEDULER => sys_sched_setscheduler(args[0], args[1], args[2] as *const u8),
+        SYSCALL_SCHED_GETSCHEDULER => sys_sched_getscheduler(args[0]),
+        SYSCALL_SCHED_GETPARAM => sys_sched_getparam(args[0], args[1] as *mut u8),
         SYSCALL_SCHED_SETAFFINITY => sys_sched_setaffinity(args[0], args[1], args[2] as *const u8),
         SYSCALL_SCHED_GETAFFINITY => sys_sched_getaffinity(args[0], args[1], args[2] as *mut u8),
         SYSCALL_SCHED_GET_PRIORITY_MAX => sys_sched_get_priority_max(args[0]),
         SYSCALL_SCHED_GET_PRIORITY_MIN => sys_sched_get_priority_min(args[0]),
+        SYSCALL_SCHED_RR_GET_INTERVAL => sys_sched_rr_get_interval(args[0], args[1] as *mut u8),
         SYSCALL_PRCTL => sys_prctl(args[0], args[1], args[2], args[3], args[4], args[5]),
         SYSCALL_SIGACTION => sys_sigaction(args[0], args[1], args[2]),
         SYSCALL_SIGPROCMASK => sys_sigprocmask(args[0] as u32, args[1], args[2]),
         SYSCALL_SIGTIMEDWAIT => sys_sigtimedwait(args[0], args[1], args[2]),
         SYSCALL_SIGRETURN => sys_sigreturn(),
+        SYSCALL_RT_SIGPENDING => sys_rt_sigpending(args[0] as *mut u8, args[1]),
+        SYSCALL_SETPRIORITY => sys_setpriority(args[0], args[1], args[2]),
+        SYSCALL_GETPRIORITY => sys_getpriority(args[0], args[1]),
         SYSCALL_TIMES => sys_times(args[0] as *mut Times),
         SYSCALL_NANOSLEEP => sys_nanosleep(
             args[0] as *const crate::timer::TimeSpec,
@@ -292,7 +322,11 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_SETPGID => sys_setpgid(args[0], args[1]),
         SYSCALL_GETPGID => sys_getpgid(args[0]),
         SYSCALL_SETSID => sys_setsid(),
+        SYSCALL_GETGROUPS => sys_getgroups(args[0] as i32, args[1] as *mut u32),
+        SYSCALL_SETGROUPS => sys_setgroups(args[0], args[1] as *const u32),
         SYSCALL_UNAME => sys_uname(args[0] as *mut u8),
+        SYSCALL_GETRLIMIT => sys_getrlimit(args[0], args[1] as *mut u8),
+        SYSCALL_SETRLIMIT => sys_setrlimit(args[0], args[1] as *const u8),
         SYSCALL_GETPID => sys_getpid(),
         SYSCALL_GETPPID => sys_getppid(),
         SYSCALL_CLONE => sys_clone(
@@ -427,24 +461,12 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_GETRANDOM => sys_getrandom(args[0] as usize, args[1] as usize, args[2] as u32),
         SYSCALL_SHUTDOWN => sys_shutdown(),
         _ => {
-            println!(
-                "[syscall] Unsupported syscall: {} ({}), calling over arguments: {:?}",
+            log::warn!(
+                "[syscall] Unsupported syscall: {} ({}), args: {:?}",
                 syscall_name(syscall_id),
                 syscall_id,
                 args
             );
-            error!(
-                "Unsupported syscall:{} ({}), calling over arguments:",
-                syscall_name(syscall_id),
-                syscall_id
-            );
-            for i in 0..args.len() {
-                error!("args[{}]: {:X}", i, args[i]);
-            }
-            crate::task::current_task()
-                .unwrap()
-                .acquire_inner_lock()
-                .add_signal(crate::task::Signals::SIGSYS);
             errno::ENOSYS
         }
     };
