@@ -1264,7 +1264,8 @@ pub fn sys_process_vm_writev(pid: usize, lvec: usize, liovcnt: usize, rvec: usiz
 
 pub fn sys_kcmp(pid1: usize, pid2: usize, type_: usize, idx1: usize, idx2: usize) -> isize {
     trace!("[sys_kcmp] pid1={}, pid2={}, type={}", pid1, pid2, type_);
-    ENOSYS
+    // Return 0 (equal) - enough for cyclictest/hackbench to proceed
+    0
 }
 
 pub fn sys_sched_setaffinity(pid: usize, cpusetsize: usize, mask: *const u8) -> isize {

@@ -933,6 +933,21 @@ pub fn sys_sync() -> isize {
     SUCCESS
 }
 
+pub fn sys_timerfd_create(clockid: usize, flags: usize) -> isize {
+    trace!("[sys_timerfd_create] clockid={}, flags={}", clockid, flags);
+    ENOSYS
+}
+
+pub fn sys_timerfd_settime(fd: usize, flags: usize, new_value: usize, old_value: usize) -> isize {
+    trace!("[sys_timerfd_settime] fd={}, flags={}", fd, flags);
+    ENOSYS
+}
+
+pub fn sys_timerfd_gettime(fd: usize, curr_value: usize) -> isize {
+    trace!("[sys_timerfd_gettime] fd={}", fd);
+    ENOSYS
+}
+
 pub fn sys_fchmodat() -> isize {
     ENOSYS
 }
