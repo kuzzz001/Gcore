@@ -257,10 +257,14 @@ fn run_group_in_dir(environ: &[*const u8], dir: &str, script: &str) {
 
 fn run_selected_groups(environ: &[*const u8], mask: u16) {
     println!("[initproc] run_selected_groups start mask=0x{:03X}", mask);
-    for (idx, (group_name, script)) in TEST_GROUPS.iter().enumerate() {
+    // Priority order: run LTP (bit11) right after libctest (bit3),
+    // before heavy tests like iozone that may crash the system
+    let priority_order: [usize; 12] = [0, 1, 2, 3, 11, 4, 5, 6, 7, 8, 9, 10];
+    for &idx in priority_order.iter() {
         if (mask & (1u16 << idx)) == 0 {
             continue;
         }
+        let (group_name, script) = TEST_GROUPS[idx];
         println!("[initproc] select bit{} group={}", idx, group_name);
         run_group_in_dir(environ, "/musl\0", script);
         run_group_in_dir(environ, "/glibc\0", script);
