@@ -137,6 +137,26 @@ impl FrameAllocator for StackFrameAllocator {
     }
 }
 
+impl StackFrameAllocator {
+    /// 分配连续物理页（跳过回收列表，直接从current分配）
+    fn alloc_contiguous(&mut self, num: usize) -> Option<Vec<FrameTracker>> {
+        if self.end - self.current < num {
+            return None;
+        }
+        let start = self.current;
+        self.current += num;
+        let mut frames = Vec::with_capacity(num);
+        for i in 0..num {
+            #[cfg(not(feature = "zero_init"))]
+            let ft = FrameTracker::new((start + i).into());
+            #[cfg(feature = "zero_init")]
+            let ft = unsafe { FrameTracker::new_uninit((start + i).into()) };
+            frames.push(ft);
+        }
+        Some(frames)
+    }
+}
+
 type FrameAllocatorImpl = StackFrameAllocator;
 
 lazy_static! {
@@ -231,6 +251,12 @@ pub fn frames_alloc(num: usize) -> Option<Vec<Arc<FrameTracker>>> {
         }
     }
     Some(frames)
+}
+
+/// 分配连续物理页（跳过回收列表，直接从current分配）
+pub fn frames_alloc_contiguous(num: usize) -> Option<Vec<Arc<FrameTracker>>> {
+    let frames = FRAME_ALLOCATOR.write().alloc_contiguous(num)?;
+    Some(frames.into_iter().map(|f| Arc::new(f)).collect())
 }
 
 #[cfg(not(feature = "oom_handler"))]

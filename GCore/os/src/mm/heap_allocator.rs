@@ -1,28 +1,79 @@
 use crate::hal::KERNEL_HEAP_SIZE;
 use buddy_system_allocator::LockedHeap;
+use core::alloc::{GlobalAlloc, Layout};
+use alloc::collections::BTreeMap;
+use alloc::sync::Arc;
+use alloc::vec::Vec;
+use lazy_static::*;
+use spin::Mutex;
 
-#[global_allocator]
-/// 全局堆分配器
-static HEAP_ALLOCATOR: LockedHeap<32> = LockedHeap::empty();
+// The buddy allocator for small allocations
+static BUDDY_ALLOC: LockedHeap<32> = LockedHeap::empty();
 
-// 标记为全局分配错误处理器
-#[alloc_error_handler]
-/// 分配错误处理
-pub fn handle_alloc_error(layout: core::alloc::Layout) -> ! {
-    panic!("Heap allocation error, layout = {:?}", layout);
+// Track large page-based allocations (key = virtual address)
+lazy_static! {
+    static ref LARGE_ALLOCS: Mutex<BTreeMap<usize, Vec<Arc<super::FrameTracker>>>> =
+        Mutex::new(BTreeMap::new());
 }
 
-/// 全局堆内存空间
+// Global heap memory space for the buddy allocator
 static mut HEAP_SPACE: [u8; KERNEL_HEAP_SIZE] = [0; KERNEL_HEAP_SIZE];
 
-/// 初始化用于内核加载开始时的堆
+/// Initialize the kernel heap
 pub fn init_heap() {
     unsafe {
-        HEAP_ALLOCATOR
+        BUDDY_ALLOC
             .lock()
-            // 起始地址和大小
             .init(HEAP_SPACE.as_ptr() as usize, KERNEL_HEAP_SIZE);
     }
+}
+
+struct KernelAllocator;
+
+unsafe impl GlobalAlloc for KernelAllocator {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        // Try buddy allocator first
+        let ptr = BUDDY_ALLOC.alloc(layout);
+        if !ptr.is_null() {
+            return ptr;
+        }
+
+        // Fallback: use page allocator for allocations >= PAGE_SIZE
+        const PAGE_SIZE: usize = 0x1000;
+        if layout.size() >= PAGE_SIZE {
+            let num_pages = (layout.size() + PAGE_SIZE - 1) / PAGE_SIZE;
+            if let Some(frames) = super::frames_alloc_contiguous(num_pages) {
+                let vaddr = frames[0].ppn.0 * PAGE_SIZE;
+                LARGE_ALLOCS.lock().insert(vaddr, frames);
+                return vaddr as *mut u8;
+            }
+        }
+
+        core::ptr::null_mut()
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        let addr = ptr as usize;
+        // Check if this is a page-allocated block
+        let frames = LARGE_ALLOCS.lock().remove(&addr);
+        if let Some(frames) = frames {
+            // Drop frames AFTER releasing the BTreeMap lock to avoid deadlock
+            // (FrameTracker drop takes FRAME_ALLOCATOR write lock)
+            drop(frames);
+            return;
+        }
+
+        // Buddy allocator dealloc
+        BUDDY_ALLOC.dealloc(ptr, layout);
+    }
+}
+
+#[global_allocator]
+static GLOBAL_ALLOC: KernelAllocator = KernelAllocator;
+
+#[alloc_error_handler]
+pub fn handle_alloc_error(layout: core::alloc::Layout) -> ! {
+    panic!("Heap allocation error, layout = {:?}", layout);
 }
 
 #[allow(unused)]
