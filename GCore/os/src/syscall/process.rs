@@ -1352,15 +1352,16 @@ pub fn sys_sched_getaffinity(pid: usize, cpusetsize: usize, mask: *mut u8) -> is
         return EINVAL;
     }
     let token = current_user_token();
-    let zero_mask = [0u8; 128];
-    let copy_size = core::cmp::min(cpusetsize, zero_mask.len());
+    let mut cpu_mask = [0u8; 128];
+    cpu_mask[0] = 1; // CPU 0 is available (musl requires at least 1 bit set)
+    let copy_size = core::cmp::min(cpusetsize, cpu_mask.len());
     let mut buffer = crate::mm::UserBuffer::new(
         match crate::mm::translated_byte_buffer(token, mask, copy_size) {
             Ok(buf) => buf,
             Err(e) => return e,
         }
     );
-    buffer.write_at(0, &zero_mask[..copy_size]);
+    buffer.write_at(0, &cpu_mask[..copy_size]);
     copy_size as isize
 }
 
