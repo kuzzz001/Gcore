@@ -648,8 +648,7 @@ impl Ext4FileSystem {
         // get remove_entry pos in parent and its prev entry
         let mut result = Ext4DirSearchResult::new(Ext4DirEntry::default());
 
-        // let r = self.dir_find_entry(parent.inode_num, path, &mut result)?;
-        let r = self.dir_find_entry(parent.inode_num, path, &mut result);
+        let _r = self.dir_find_entry(parent.inode_num, path, &mut result)?;
 
         let mut ext4block =
             Block::load_offset(self.block_device.clone(), result.pblock_id * self.block_size);
@@ -725,8 +724,7 @@ impl Ext4FileSystem {
     pub fn dir_remove(&self, parent: u32, path: &str) -> Result<usize, isize> {
         let mut search_result = Ext4DirSearchResult::new(Ext4DirEntry::default());
 
-        // let r = self.dir_find_entry(parent as u32, path, &mut search_result)?;
-        let r = self.dir_find_entry(parent, path, &mut search_result);
+        let _r = self.dir_find_entry(parent, path, &mut search_result)?;
 
         let mut parent_inode_ref = self.get_inode_ref(parent);
         let mut child_inode_ref = self.get_inode_ref(search_result.dentry.inode);

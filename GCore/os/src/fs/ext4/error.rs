@@ -78,12 +78,11 @@ impl From<alloc::string::FromUtf8Error> for Ext4Error {
     }
 }
 
-// // xein add this maybe wrong
-// impl From<isize> for Ext4Error {
-//     fn from(err: isize) -> Self {
-//         Ext4Error::new(Errno)
-//     }
-// }
+impl From<Ext4Error> for isize {
+    fn from(e: Ext4Error) -> Self {
+        -(e.error() as i32) as isize
+    }
+}
 
 #[macro_export]
 macro_rules! return_errno {

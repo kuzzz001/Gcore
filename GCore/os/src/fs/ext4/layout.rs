@@ -625,7 +625,7 @@ impl File for Ext4OSInode {
             &mut parent_inode_ref,
             &mut child_inode_ref,
             dir_node.name.as_str(),
-        );
+        )?;
 
         // 写回父 inode
         self.ext4fs.write_back_inode(&mut parent_inode_ref);

@@ -135,7 +135,10 @@ impl<T: PageTable> MemorySet<T> {
         {
             let result = area.unmap(&mut self.page_table);
             self.areas.remove(idx);
-            result
+            if let Err(MemoryError::NotMapped) = result {
+                warn!("[remove_area] some pages were not mapped (lazy alloc)");
+            }
+            Ok(())
         } else {
             Err(MemoryError::AreaNotFound)
         }
@@ -1221,8 +1224,14 @@ impl<T: PageTable> MemorySet<T> {
         }
         // dealloc trap_cx manually
         let trap_cx_bottom_va: VirtAddr = trap_cx_bottom_from_tid(tid).into();
-        self.remove_area_with_start_vpn(trap_cx_bottom_va.into())
-            .unwrap();
+        if let Err(err) = self.remove_area_with_start_vpn(trap_cx_bottom_va.into()) {
+            match err {
+                MemoryError::AreaNotFound => {
+                    warn!("[dealloc_user_res] trap_cx area not found")
+                }
+                _ => unreachable!(),
+            }
+        }
     }
 
     pub fn is_dirty(&self, ppn: PhysPageNum) -> Option<bool> {
