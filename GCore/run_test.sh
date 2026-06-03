@@ -2,12 +2,39 @@
 
 set -o pipefail
 
-groups=(basic busybox lua libctest iozone unixbench iperf libcbench lmbench netperf cyclictest ltp)
+all_groups=(basic busybox lua libctest iozone unixbench iperf libcbench lmbench netperf cyclictest ltp)
+groups=("${all_groups[@]}")
 group_timeout_sec="${GROUP_TIMEOUT_SEC:-300}"
 requested_arch="${TEST_ARCH:-rv64}"
+requested_groups="${TEST_GROUPS:-}"
 blk_mode_global="${TEST_BLK_MODE:-}"
 blk_mode_rv="${TEST_BLK_MODE_RV:-}"
 blk_mode_la="${TEST_BLK_MODE_LA:-}"
+
+# 仅运行 TEST_GROUPS 指定的组（逗号分隔），便于单独调试或跳过慢组。
+# 例如: TEST_GROUPS=busybox ./run_test.sh   或   TEST_GROUPS=busybox,ltp ./run_test.sh
+if [[ -n "${requested_groups}" ]]; then
+  groups=()
+  for requested_group in ${requested_groups//,/ }; do
+    found_group=false
+    for known_group in "${all_groups[@]}"; do
+      if [[ "${requested_group}" == "${known_group}" ]]; then
+        groups+=("${requested_group}")
+        found_group=true
+        break
+      fi
+    done
+    if [[ "${found_group}" == false ]]; then
+      echo "[run_test] unsupported TEST_GROUPS entry=${requested_group}"
+      echo "[run_test] supported groups: ${all_groups[*]}"
+      exit 1
+    fi
+  done
+  if [[ "${#groups[@]}" -eq 0 ]]; then
+    echo "[run_test] TEST_GROUPS did not contain any runnable group"
+    exit 1
+  fi
+fi
 
 case "${requested_arch}" in
   rv|rv64)
@@ -41,7 +68,10 @@ resolve_blk_mode() {
     if [[ -n "${blk_mode_la}" ]]; then
       echo "${blk_mode_la}"
     else
-      echo "mem"
+      # la 默认走 virt_pci，与 os/make/la64o.mk 默认及 `make la64-run` 一致。
+      # 注意：mem 模式会编译 load_img.S 而不编译 preload_app.S，
+      # 但 fs::flush_preload() 无条件引用 sinitproc/sbash/sbusybox，会导致链接失败。
+      echo "virt_pci"
     fi
   fi
 }
@@ -62,6 +92,19 @@ resolve_result_dir() {
   else
     echo "testresult/la"
   fi
+}
+
+# 返回组名在 all_groups 中的固定下标，用于计算 mask 位。
+# 必须基于 all_groups（而非可能被 TEST_GROUPS 裁剪过的 groups），否则只跑子集时 mask 会错位。
+group_bit_index() {
+  local group="$1"
+  for i in "${!all_groups[@]}"; do
+    if [[ "${all_groups[$i]}" == "${group}" ]]; then
+      echo "${i}"
+      return 0
+    fi
+  done
+  return 1
 }
 
 on_interrupt() {
@@ -124,7 +167,8 @@ for arch in "${arch_list[@]}"; do
 
   for i in "${!groups[@]}"; do
     g="${groups[$i]}"
-    mask=$(printf "0x%03X" $((1 << i)))
+    group_bit="$(group_bit_index "${g}")"
+    mask=$(printf "0x%03X" $((1 << group_bit)))
     conf="/tmp/os_test_${arch}_${blk_mode}_${g}.conf"
     log="${result_dir}/${g}.log"
 
@@ -176,3 +220,8 @@ done
 
 echo "=== SUMMARY ALL ARCH ==="
 echo "PASS=${total_pass_count} FAIL=${total_fail_count} TIMEOUT=${total_timeout_count} TOTAL=$(( ${#groups[@]} * ${#arch_list[@]} ))"
+
+# 有任意失败或超时则以非 0 退出，便于 CI/上层脚本感知。
+if [[ "${total_fail_count}" -ne 0 || "${total_timeout_count}" -ne 0 ]]; then
+  exit 1
+fi
