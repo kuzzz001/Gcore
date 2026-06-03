@@ -106,12 +106,21 @@ pub fn trap_handler() -> ! {
             if let Err(error) = task.vm.lock().do_page_fault(addr) {
                 match error {
                     MemoryError::BeyondEOF => {
+                        inner.sigmask.remove(Signals::SIGBUS);
                         inner.add_signal(Signals::SIGBUS);
                     }
                     MemoryError::NoPermission | MemoryError::BadAddress | MemoryError::NotMapped => {
+                        inner.sigmask.remove(Signals::SIGSEGV);
                         inner.add_signal(Signals::SIGSEGV);
                     }
-                    _ => unreachable!(),
+                    other => {
+                        log::warn!(
+                            "[page_fault] unexpected memory error {:?}, send SIGSEGV",
+                            other
+                        );
+                        inner.sigmask.remove(Signals::SIGSEGV);
+                        inner.add_signal(Signals::SIGSEGV);
+                    }
                 }
             };
         }

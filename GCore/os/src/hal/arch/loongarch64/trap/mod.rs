@@ -213,12 +213,23 @@ pub fn trap_handler() -> ! {
             match mset_lock.do_page_fault(addr) {
                 Err(error) => match error {
                     MemoryError::BeyondEOF => {
+                        inner.sigmask.remove(Signals::SIGBUS);
                         inner.add_signal(Signals::SIGBUS);
                     }
-                    MemoryError::NoPermission | MemoryError::BadAddress => {
+                    MemoryError::NoPermission
+                    | MemoryError::BadAddress
+                    | MemoryError::NotMapped => {
+                        inner.sigmask.remove(Signals::SIGSEGV);
                         inner.add_signal(Signals::SIGSEGV);
                     }
-                    _ => unreachable!(),
+                    other => {
+                        log::warn!(
+                            "[page_fault] unexpected memory error {:?}, send SIGSEGV",
+                            other
+                        );
+                        inner.sigmask.remove(Signals::SIGSEGV);
+                        inner.add_signal(Signals::SIGSEGV);
+                    }
                 },
                 Ok(_) => {
                     //tlb_addr_allow_write(addr.floor(), _paddr.floor()).unwrap();
