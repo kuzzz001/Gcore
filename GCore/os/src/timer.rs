@@ -337,9 +337,7 @@ pub fn current_time() -> u64 {
 
 /// 获取系统启动以来的时间（秒）
 pub fn uptime() -> u64 {
-    unsafe {
-        TIME_SOURCE.expect("TimeSource not initialized").uptime()
-    }
+    get_time_sec() as u64
 }
 
 /// 解析启动参数，如 `now=1749900000`
@@ -354,8 +352,10 @@ fn parse_cmdline_boot_time(cmdline: &str) -> Option<u64> {
     None
 }
 
+#[cfg(feature = "riscv")]
 pub struct MTime;
 
+#[cfg(feature = "riscv")]
 impl TimeSource for MTime {
     fn uptime(&self) -> u64 {
         let ticks = riscv::register::time::read() as u64;

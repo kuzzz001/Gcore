@@ -52,19 +52,15 @@ impl From<MmioVersion> for u32 {
 }
 
 /// An error encountered initialising a VirtIO MMIO transport.
-#[derive(Clone, Debug, Eq, Error, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MmioError {
     /// The header doesn't start with the expected magic value 0x74726976.
-    #[error("Invalid magic value {0:#010x} (expected 0x74726976)")]
     BadMagic(u32),
     /// The header reports a version number that is neither 1 (legacy) nor 2 (modern).
-    #[error("Unsupported Virtio MMIO version {0}")]
     UnsupportedVersion(u32),
     /// The header reports a device ID of 0.
-    #[error("Invalid or unknown device ID: {0}")]
     InvalidDeviceID(DeviceTypeError),
     /// The MMIO region size was smaller than the header size we expect.
-    #[error("MMIO region too small")]
     MmioRegionTooSmall,
 }
 

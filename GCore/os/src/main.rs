@@ -99,7 +99,6 @@ pub fn rust_main() -> ! {
     println!("[kernel] Hello, world!");
 
     machine_init();
-    timer::init_time_source(&timer::MTime);
     #[cfg(feature = "board_rvqemu")]
     timer::init_rtc_time();
     utils::random::init_rng();
@@ -110,7 +109,6 @@ pub fn rust_main() -> ! {
     println!("[kernel] block in virt mode!");
     #[cfg(feature = "oom_handler")]
     println!("[kernel] oom_handler is enabled!");
-    #[cfg(feature = "riscv")]
     fs::flush_preload();
     task::add_initproc();
     // note that in run_tasks(), there is yet *another* pre_start_init(),
