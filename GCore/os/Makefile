@@ -69,7 +69,7 @@ la64-kernel-build-only:
 	cp ./src/lang_items.rs.la ./src/lang_items.rs
 	cp ../user/src/lang_items.rs.la ../user/src/lang_items.rs
 	@cd ../user && make rust-user BOARD=laqemu MODE=${MODE}
-	make -f make/la64o.mk build BLK_MODE=${BLK_MODE} MODE=${MODE} LOG=${LOG}
+	make -f make/la64o.mk build MODE=${MODE} LOG=${LOG}
 
 la64-debug:
 	@rustup override set nightly-2024-05-01-x86_64-unknown-linux-gnu

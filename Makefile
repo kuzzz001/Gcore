@@ -9,7 +9,7 @@ rv64:
 	cp -f GCore/kernel-rv ./kernel-rv
 
 la64:
-	$(MAKE) -C GCore/os la64-kernel-build-only MODE=$(MODE) BLK_MODE=$(BLK_MODE) LOG=$(LOG); \
+	$(MAKE) -C GCore/os la64-kernel-build-only MODE=$(MODE) LOG=$(LOG); \
 	if [ -f GCore/kernel-la ]; then cp -f GCore/kernel-la ./kernel-la; fi
 
 clean:
