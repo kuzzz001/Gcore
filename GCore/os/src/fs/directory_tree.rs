@@ -342,15 +342,23 @@ impl DirectoryTreeNode {
         // println!("open file in dtn: cwd: {} name: {}",self.get_cwd(), path );
 
 
-        // 重定向链接库
+        // 重定向链接库（initproc 创建 symlink，内核只做兜底）
         let path = match path {
+            // ld-linux 解释器
             "/lib/ld-linux-riscv64-lp64.so.1" => "/glibc/lib/ld-linux-riscv64-lp64.so.1",
             "/lib/ld-linux-riscv64-lp64d.so.1" => "/glibc/lib/ld-linux-riscv64-lp64d.so.1",
-            "/lib/ld-musl-riscv64.so.1" | "/lib/ld-musl-riscv64-sf.so.1" => "/musl/lib/libc.so",
             "/lib64/ld-linux-loongarch-lp64d.so.1" => "/glibc/lib/ld-linux-loongarch-lp64d.so.1",
-            "libm.so.6" => "/glibc/lib/libm.so.6",
+            // ld-musl（musl 单体 libc.so 即为动态链接器）
+            "/lib/ld-musl-riscv64.so.1" | "/lib/ld-musl-riscv64-sf.so.1" => "/musl/lib/libc.so",
             "/lib64/ld-musl-loongarch-lp64d.so.1" => "/musl/lib/libc.so",
-            "/usr/lib/tls_get_new-dtv_dso.so" => "./libtls_get_new-dtv_dso.so",
+            // glibc 共享库
+            "/lib/libc.so.6" | "libc.so.6" => "/glibc/lib/libc.so.6",
+            "/lib/libm.so.6" | "libm.so.6" => "/glibc/lib/libm.so.6",
+            "/lib/libpthread.so.0" | "libpthread.so.0" => "/glibc/lib/libpthread.so.0",
+            "/lib/libdl.so.2" | "libdl.so.2" => "/glibc/lib/libdl.so.2",
+            "/lib/librt.so.1" | "librt.so.1" => "/glibc/lib/librt.so.1",
+            // 其他特殊路径
+            "/usr/lib/tls_get_new-dtv_dso.so" => "/glibc/lib/tls_get_new-dtv_dso.so",
             _ => path,
         };
 
