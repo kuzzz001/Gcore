@@ -1269,7 +1269,12 @@ pub fn remap_test() {
 pub fn check_page_fault(addr: VirtAddr) -> Result<PhysAddr, isize> {
     // This is where we handle the page fault.
     super::frame_reserve(3);
-    let task = current_task().unwrap();
+    // 线程退出竞争下，缺页可能发生在已无当前任务的上下文（pthread_cond_smasher 等
+    // 压力测例会触发）。此时返回 EFAULT 让上层按 bad addr 处理，而非 unwrap 导致内核 panic。
+    let task = match current_task() {
+        Some(t) => t,
+        None => return Err(EFAULT),
+    };
     match task.vm.lock().do_page_fault(addr) {
         Ok(pa) => return Ok(pa),
         Err(MemoryError::BeyondEOF)
