@@ -344,8 +344,8 @@ impl DirectoryTreeNode {
 
         // 重定向链接库
         let path = match path {
-            "/lib/ld-linux-riscv64-lp64.so.1" => "/musl/lib/libc.so",
-            "/lib/ld-linux-riscv64-lp64d.so.1" => "/musl/lib/libc.so",
+            "/lib/ld-linux-riscv64-lp64.so.1" => "/glibc/lib/ld-linux-riscv64-lp64.so.1",
+            "/lib/ld-linux-riscv64-lp64d.so.1" => "/glibc/lib/ld-linux-riscv64-lp64d.so.1",
             "/lib/ld-musl-riscv64.so.1" | "/lib/ld-musl-riscv64-sf.so.1" => "/musl/lib/libc.so",
             "/lib64/ld-linux-loongarch-lp64d.so.1" => "/glibc/lib/ld-linux-loongarch-lp64d.so.1",
             "libm.so.6" => "/glibc/lib/libm.so.6",
