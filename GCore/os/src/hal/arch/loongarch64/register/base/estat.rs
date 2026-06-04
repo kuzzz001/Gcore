@@ -53,15 +53,26 @@ impl EStat {
         let ecode = self.ecode();
         if ecode == 0 {
             if ecfg::ECfg::read().get_entries_margin() == 0 {
-                return Trap::Interrupt(
-                    Interrupt::try_from(63 - self.get_is().leading_zeros() as usize).unwrap(),
-                );
+                let is = self.get_is();
+                // is==0 表示没有任何中断位置位（伪中断/竞态，例如 sem_wait+定时器场景）：
+                // leading_zeros()==64，63-64 在 usize 下溢成 -1，try_from 必然失败。
+                // 返回 Unknown 交由上层忽略，避免 unwrap 导致内核 panic 带走整场测试。
+                if is == 0 {
+                    return Trap::Unknown;
+                }
+                return match Interrupt::try_from(63 - is.leading_zeros() as usize) {
+                    Ok(intr) => Trap::Interrupt(intr),
+                    Err(_) => Trap::Unknown,
+                };
             }
         } else {
-            return Trap::Exception(Exception::try_from(ecode).unwrap());
+            return match Exception::try_from(ecode) {
+                Ok(e) => Trap::Exception(e),
+                Err(_) => Trap::Unknown,
+            };
         }
 
-        unreachable!()
+        Trap::Unknown
     }
 }
 

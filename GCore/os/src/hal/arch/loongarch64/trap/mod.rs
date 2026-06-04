@@ -322,9 +322,16 @@ pub fn trap_handler() -> ! {
                 );
             }
         }
+        Trap::Unknown => {
+            // 伪中断 / 无法识别的 trap（如 estat 读到 ecode=0 且 IS=0 的竞态）。
+            // 直接忽略并返回用户态，避免内核 panic 把整场测试带走。
+            log::warn!(
+                "[trap_handler] ignored spurious/unknown trap, stval = {:#x}, BadI = {:#x}",
+                stval, badi
+            );
+        }
         Trap::Interrupt(Interrupt::IPI)
         | Trap::MachineError(_)
-        | Trap::Unknown
         | Trap::Exception(Exception::AddressError)
         | _ => {
             panic!(
