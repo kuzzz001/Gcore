@@ -363,7 +363,12 @@ impl Ext4FileSystem {
 
             prev_de_offset = offset;
             // go to next entry
-            offset = offset + de.entry_len() as usize;
+            let len = de.entry_len() as usize;
+            // 防御损坏目录项：entry_len 为 0 会导致死循环
+            if len == 0 {
+                break;
+            }
+            offset = offset + len;
         }
         //println!("[kernel direntry] dir find in block failed");
         return Err(Errno::ENOENT as isize);
@@ -411,10 +416,16 @@ impl Ext4FileSystem {
                 // 遍历块内所有项
                 while offset < self.block_size - core::mem::size_of::<Ext4DirEntryTail>() {
                     let de: Ext4DirEntry = ext4block.read_offset_as(offset);
+                    let len = de.entry_len() as usize;
+                    // 防御损坏目录项：entry_len 为 0 会让 offset 不前进而死循环
+                    // （mkdir/rmdir/rename 残留的坏项会让 readdir/du 原地空转并 OOM）。
+                    if len == 0 {
+                        break;
+                    }
                     if !de.unused() {
                         entries.push(de);
                     }
-                    offset += de.entry_len() as usize;
+                    offset += len;
                 }
             }
 
@@ -457,10 +468,16 @@ impl Ext4FileSystem {
                 // 遍历块内所有项
                 while offset < self.block_size - core::mem::size_of::<Ext4DirEntryTail>() {
                     let de: Ext4DirEntry = ext4block.read_offset_as(offset);
+                    let len = de.entry_len() as usize;
+                    // 防御损坏目录项：entry_len 为 0 会让 offset 不前进而死循环
+                    // （mkdir/rmdir/rename 残留的坏项会让 readdir/du 原地空转并 OOM）。
+                    if len == 0 {
+                        break;
+                    }
                     if !de.unused() {
                         entries.push(de);
                     }
-                    offset += de.entry_len() as usize;
+                    offset += len;
                 }
             }
 
@@ -561,7 +578,8 @@ impl Ext4FileSystem {
     ) -> Result<usize, isize> {
         // required length aligned to 4 bytes
         let required_len = {
-            let mut len = size_of::<Ext4DirEntry>() + name.len();
+            // 必须用 FakeDirEntry(固定 8 字节头)，不能用 Ext4DirEntry(可能含 name 缓冲，会高估导致永远 No space)
+            let mut len = core::mem::size_of::<Ext4FakeDirEntry>() + name.len();
             if len % 4 != 0 {
                 len += 4 - (len % 4);
             }
@@ -573,45 +591,50 @@ impl Ext4FileSystem {
         // Start from the first entry
         while offset < self.block_size - size_of::<Ext4DirEntryTail>() {
             let mut de = Ext4DirEntry::try_from(&block.data[offset..]).unwrap();
+            let rec_len = de.entry_len as usize;
+            // 防御损坏/越界项：rec_len 小于最小目录项头(8)即无效，停止遍历，避免死循环与下溢
+            if rec_len < 8 {
+                break;
+            }
+
+            let de_type = DirEntryType::EXT4_DE_DIR;
 
             if de.unused() {
+                // unused 空位足够大则直接复用整项
+                if rec_len >= required_len {
+                    let mut new_entry = Ext4DirEntry::default();
+                    new_entry.write_entry(rec_len as u16, child_inode, name, de_type);
+                    new_entry.copy_to_slice(&mut block.data, offset);
+                    block.sync_blk_to_disk(self.block_device.clone());
+                    return Ok(EOK);
+                }
+                offset += rec_len;
                 continue;
             }
 
-            let inode = de.inode;
-            let rec_len = de.entry_len;
-
             let used_len = de.name_len as usize;
             let mut sz = core::mem::size_of::<Ext4FakeDirEntry>() + used_len;
-            if used_len % 4 != 0 {
-                sz += 4 - used_len % 4;
+            if sz % 4 != 0 {
+                sz += 4 - (sz % 4);
             }
 
-            let free_space = rec_len as usize - sz;
-
-            // If there is enough free space
-            if free_space >= required_len {
-                // Create new directory entry
-                let mut new_entry = Ext4DirEntry::default();
-
-                // Update existing entry length and copy both entries back to block data
-                de.entry_len = sz as u16;
-
-                let de_type = DirEntryType::EXT4_DE_DIR;
-                new_entry.write_entry(free_space as u16, child_inode, name, de_type);
-
-                // update parent_de and new_de to blk_data
-                de.copy_to_slice(&mut block.data, offset);
-                new_entry.copy_to_slice(&mut block.data, offset + sz);
-
-                // Sync to disk
-                block.sync_blk_to_disk(self.block_device.clone());
-
-                return Ok(EOK);
+            // 必须 rec_len >= sz 才计算剩余空间，否则 usize 下溢会算出巨大 free_space 写坏块
+            if rec_len >= sz {
+                let free_space = rec_len - sz;
+                if free_space >= required_len {
+                    let mut new_entry = Ext4DirEntry::default();
+                    // 缩短现有项到实际占用，剩余空间留给新项
+                    de.entry_len = sz as u16;
+                    new_entry.write_entry(free_space as u16, child_inode, name, de_type);
+                    de.copy_to_slice(&mut block.data, offset);
+                    new_entry.copy_to_slice(&mut block.data, offset + sz);
+                    block.sync_blk_to_disk(self.block_device.clone());
+                    return Ok(EOK);
+                }
             }
 
             // Move to the next entry
-            offset += de.entry_len() as usize;
+            offset += rec_len;
         }
 
         println!("[kernel direntry] No space in block for new entry");
@@ -636,8 +659,6 @@ impl Ext4FileSystem {
         let el = self.block_size - size_of::<Ext4DirEntryTail>();
         new_entry.write_entry(el as u16, inode, name, de_type);
         new_entry.copy_to_slice(&mut block.data, 0);
-
-        copy_dir_entry_to_array(&new_entry, &mut block.data, 0);
 
         // init tail for new block
         let tail = Ext4DirEntryTail::new();
