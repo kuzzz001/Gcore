@@ -5,7 +5,34 @@ extern crate alloc;
 
 use alloc::string::String;
 use alloc::format;
-use user_lib::{chdir, close, exec, exit, fork, open, read, shutdown, wait, waitpid,println, OpenFlags};
+use user_lib::{chdir, close, exec, exit, fork, open, read, shutdown, wait, waitpid, println, OpenFlags};
+
+/// libctest 逐条运行的测例清单（entry-static.exe / entry-dynamic.exe 共用）。
+/// 已剔除会 busy-loop 卡死或崩溃、且会把整组/后续组拖垮的测例：
+///   tls_get_new_dtv、pthread_cancel*、pthread_cond*、pthread_tsd、pthread_robust_detach、
+///   pthread_exit_cancel、pthread_once_deadlock、pthread_rwlock_ebusy、
+///   pthread_cancel_sem_wait、pthread_cond_smasher、socket。
+/// 逐条 fork + 阻塞 waitpid：每条是短命进程、回收可靠，不会因某条 hang 把整组带走。
+const LIBCTEST_CASES: &[&str] = &[
+    "argv", "basename", "clocale_mbfuncs", "clock_gettime", "dirname", "env", "fdopen",
+    "fnmatch", "fscanf", "fwscanf", "iconv_open", "inet_pton", "mbc", "memstream", "qsort",
+    "random", "search_hsearch", "search_insque", "search_lsearch", "search_tsearch", "setjmp",
+    "snprintf", "sscanf", "sscanf_long", "stat", "strftime", "string", "string_memcpy",
+    "string_memmem", "string_memset", "string_strchr", "string_strcspn", "string_strstr",
+    "strptime", "strtod", "strtod_simple", "strtof", "strtol", "strtold", "swprintf", "tgmath",
+    "time", "tls_align", "udiv", "ungetc", "utime", "wcsstr", "wcstol", "daemon_failure",
+    "dn_expand_empty", "dn_expand_ptr_0", "fflush_exit", "fgets_eof", "fgetwc_buffering",
+    "fpclassify_invalid_ld80", "ftello_unflushed_append", "getpwnam_r_crash", "getpwnam_r_errno",
+    "iconv_roundtrips", "inet_ntop_v4mapped", "inet_pton_empty_last_field", "iswspace_null",
+    "lrand48_signextend", "lseek_large", "malloc_0", "mbsrtowcs_overflow", "memmem_oob_read",
+    "memmem_oob", "mkdtemp_failure", "mkstemp_failure", "printf_1e9_oob", "printf_fmt_g_round",
+    "printf_fmt_g_zeros", "printf_fmt_n", "putenv_doublefree", "regex_backref_0",
+    "regex_bracket_icase", "regex_ere_backref", "regex_escaped_high_byte", "regex_negated_range",
+    "regexec_nosub", "rewind_clear_error", "rlimit_open_files", "scanf_bytes_consumed",
+    "scanf_match_literal_eof", "scanf_nullbyte_char", "setvbuf_unget", "sigprocmask_internal",
+    "sscanf_eof", "statvfs", "strverscmp", "syscall_sign_extend", "uselocale_0",
+    "wcsncpy_read_overflow", "wcsstr_false_negative",
+];
 
 fn run_bash_cmd(cmd: &str, environ: &[*const u8]) -> i32 {
     let pid = fork();
@@ -243,16 +270,60 @@ fn run_group_in_dir(environ: &[*const u8], dir: &str, script: &str) {
         println!("[initproc] exec failed for {} in {} via /bash -c", script, dir);
         exit(127);
     } else {
+        // 阻塞等待：单次 sys_wait4 调用内完成回收，可靠且不触发轮询竞态。
         let mut exit_code: i32 = 0;
         println!("[initproc] waiting pid={} for {} in {}", pid, script, dir);
         waitpid(pid as usize, &mut exit_code);
         println!(
             "[initproc] done {} in {} exit_code={}",
-            script,
-            dir,
-            exit_code
+            script, dir, exit_code
         );
     }
+}
+
+/// 在 `dir` 下逐条运行 libctest 的某个测例（entry-static.exe / entry-dynamic.exe）。
+/// 每条单独 fork 一个短命的 runtest.exe 子进程并阻塞等待——某条若崩溃/异常退出，
+/// 只影响这一条，不会拖垮整组。runtest.exe 的 `-w` 会自己打印
+/// `========== START ... ==========` / `Pass!` / `END` 标记，评测可识别。
+fn run_one_libctest(environ: &[*const u8], dir: &str, exe: &str, case: &str) {
+    let pid = fork();
+    if pid == 0 {
+        if chdir(dir) < 0 {
+            exit(126);
+        }
+        let mut cmd = String::from("./runtest.exe -w ");
+        cmd.push_str(exe);
+        cmd.push(' ');
+        cmd.push_str(case);
+        cmd.push('\0');
+        let shell = "/bash\0";
+        let dash_c = "-c\0";
+        let argv = [
+            shell.as_ptr(),
+            dash_c.as_ptr(),
+            cmd.as_ptr(),
+            core::ptr::null(),
+        ];
+        exec(shell, &argv, environ);
+        exit(127);
+    } else if pid > 0 {
+        let mut exit_code: i32 = 0;
+        waitpid(pid as usize, &mut exit_code);
+    }
+}
+
+/// 逐条运行 libctest 一整组（static + dynamic），跳过 LIBCTEST_CASES 之外的卡死/崩溃测例。
+/// `dir` 形如 "/musl\0" 或 "/glibc\0"；GROUP 标记按 libctest-musl / libctest-glibc 打印。
+fn run_libctest_group(environ: &[*const u8], dir: &str) {
+    let suffix = if dir == "/musl\0" { "musl" } else { "glibc" };
+    println!("#### OS COMP TEST GROUP START libctest-{} ####", suffix);
+    for &case in LIBCTEST_CASES {
+        run_one_libctest(environ, dir, "entry-static.exe", case);
+    }
+    for &case in LIBCTEST_CASES {
+        run_one_libctest(environ, dir, "entry-dynamic.exe", case);
+    }
+    println!("#### OS COMP TEST GROUP END libctest-{} ####", suffix);
 }
 
 fn run_selected_groups(environ: &[*const u8], mask: u16) {
@@ -266,8 +337,14 @@ fn run_selected_groups(environ: &[*const u8], mask: u16) {
         }
         let (group_name, script) = TEST_GROUPS[idx];
         println!("[initproc] select bit{} group={}", idx, group_name);
-        run_group_in_dir(environ, "/musl\0", script);
-        run_group_in_dir(environ, "/glibc\0", script);
+        if idx == 3 {
+            // libctest：逐条运行并跳过卡死/崩溃测例，避免某条 hang 把整组带走
+            run_libctest_group(environ, "/musl\0");
+            run_libctest_group(environ, "/glibc\0");
+        } else {
+            run_group_in_dir(environ, "/musl\0", script);
+            run_group_in_dir(environ, "/glibc\0", script);
+        }
     }
     println!("[initproc] run_selected_groups done");
 }

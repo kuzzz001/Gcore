@@ -51,6 +51,13 @@ pub fn wait(exit_code: &mut i32) -> isize {
 pub fn waitpid(pid: usize, exit_code: &mut i32) -> isize {
     sys_waitpid(pid as isize, exit_code as *mut _)
 }
+/// 非阻塞等待（WNOHANG）：返回 0 表示子进程仍在运行，>0 为结束的 pid，<0 为错误。
+pub fn waitpid_nohang(pid: usize, exit_code: &mut i32) -> isize {
+    sys_wait4(pid as isize, exit_code as *mut _, 1)
+}
+pub fn kill(pid: usize, sig: usize) -> isize {
+    sys_kill(pid, sig)
+}
 pub fn sleep(period_ms: usize) {
     let start = sys_get_time();
     while sys_get_time() < start + period_ms as isize {
