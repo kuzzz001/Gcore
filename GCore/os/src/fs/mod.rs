@@ -7,6 +7,7 @@ pub mod file_trait;
 mod filesystem;
 mod layout;
 pub mod poll;
+pub mod procfs;
 #[cfg(feature = "swap")]
 pub mod swap;
 // Xein add this
