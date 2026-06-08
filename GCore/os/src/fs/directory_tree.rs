@@ -784,34 +784,14 @@ fn init_tmp_directory() {
 }
 // 初始化进程目录
 fn init_proc_directory() {
-    ROOT.mkdir("/proc");
-
-    let proc_inode = match ROOT.cd_path("/proc") {
-        Ok(inode) => inode,
-        Err(_) => {
-            println!("[kernel] failed to cd /proc");
-            return;
-        }
-    };
-
+    match ROOT.mkdir("/proc") {
+        _ => {}
+    }
     println!("[kernel] init_proc_directory successfully!");
-
-    // /proc/meminfo — dynamic memory info device
-    use crate::fs::filesystem::FS_Type;
-    let meminfo_dev = DirectoryTreeNode::new(
-        "meminfo".to_string(),
-        Arc::new(FileSystem::new(FS_Type::Null)),
-        Arc::new(crate::fs::procfs::ProcMeminfo),
-        Arc::downgrade(&proc_inode.get_arc()),
-    );
-    let mut lock = proc_inode.children.write();
-    // cache_all_subfile populates the children BTreeMap from disk (needed before insert)
-    let _ = proc_inode.cache_all_subfile(&mut lock);
-    lock.as_mut().unwrap().insert("meminfo".to_string(), meminfo_dev);
-    drop(lock);
+    match ROOT.open("/proc/meminfo", OpenFlags::O_CREAT, false) {
+        _ => {}
+    }
     println!("[kernel] init_proc_meminfo_directory successfully!");
-
-    // /proc/mounts — keep as regular file
     match ROOT.open("/proc/mounts", OpenFlags::O_CREAT, false) {
         _ => {}
     }
