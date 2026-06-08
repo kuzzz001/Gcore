@@ -11,6 +11,5 @@
             run_group_in_dir(environ, "/musl\0", script);
             run_group_in_dir(environ, "/glibc\0", script);
         }
-    }
     println!("[initproc] run_selected_groups done");
 }
