@@ -7,7 +7,6 @@ use crate::syscall::errno::*;
 use crate::task::block_current_and_run_next;
 use crate::task::current_task;
 use crate::task::wait_with_timeout;
-
 use crate::timer::TimeSpec;
 use crate::{fs::file_trait::File, mm::UserBuffer};
 use alloc::boxed::Box;
@@ -193,28 +192,10 @@ impl File for Pipe {
                 }
                 drop(ring);
                 let task = current_task().unwrap();
-                let inner = task.acquire_inner_lock();
-                // If there are pending unblocked signals, return immediately
-                // so that the trap-return path can deliver them via do_signal().
-                if !inner.sigpending.difference(inner.sigmask).is_empty() {
-                    drop(inner);
-                    drop(task);
-                    return read_size;
-                }
-                drop(inner);
                 wait_with_timeout(Arc::downgrade(&task), TimeSpec::now());
                 drop(task);
                 block_current_and_run_next();
-                // After resuming, check if we were woken by a signal
-                let task = current_task().unwrap();
-                let inner = task.acquire_inner_lock();
-                if !inner.sigpending.difference(inner.sigmask).is_empty() {
-                    drop(inner);
-                    drop(task);
-                    return read_size;
-                }
-                drop(inner);
-                drop(task);
+                // suspend_current_and_run_next();
                 continue;
             }
             // We guarantee that this operation will read at least one byte
@@ -223,15 +204,11 @@ impl File for Pipe {
                 read_size += read_bytes;
                 if ring.head == ring.tail {
                     ring.status = RingBufferStatus::EMPTY;
-                    drop(ring);
-                    // wake_all_interruptible removed - too aggressive
                     return read_size;
                 }
             }
 
             ring.status = RingBufferStatus::NORMAL;
-            drop(ring);
-            // wake_all_interruptible removed - too aggressive
             return read_size;
         }
     }
@@ -257,26 +234,10 @@ impl File for Pipe {
                 }
                 drop(ring);
                 let task = current_task().unwrap();
-                let inner = task.acquire_inner_lock();
-                if !inner.sigpending.difference(inner.sigmask).is_empty() {
-                    drop(inner);
-                    drop(task);
-                    return write_size;
-                }
-                drop(inner);
                 wait_with_timeout(Arc::downgrade(&task), TimeSpec::now());
                 drop(task);
                 block_current_and_run_next();
-                // After resuming, check if we were woken by a signal
-                let task = current_task().unwrap();
-                let inner = task.acquire_inner_lock();
-                if !inner.sigpending.difference(inner.sigmask).is_empty() {
-                    drop(inner);
-                    drop(task);
-                    return write_size;
-                }
-                drop(inner);
-                drop(task);
+                // suspend_current_and_run_next();
                 continue;
             }
             // We guarantee that this operation will write at least one byte
@@ -286,14 +247,10 @@ impl File for Pipe {
                 write_size += write_bytes;
                 if ring.head == ring.tail {
                     ring.status = RingBufferStatus::FULL;
-                    drop(ring);
-                    // wake_all_interruptible removed - too aggressive
                     return write_size;
                 }
             }
             ring.status = RingBufferStatus::NORMAL;
-            drop(ring);
-            // wake_all_interruptible removed - too aggressive
             return write_size;
         }
     }
@@ -329,26 +286,10 @@ impl File for Pipe {
                 }
                 drop(ring);
                 let task = current_task().unwrap();
-                let inner = task.acquire_inner_lock();
-                if !inner.sigpending.difference(inner.sigmask).is_empty() {
-                    drop(inner);
-                    drop(task);
-                    return read_size;
-                }
-                drop(inner);
                 wait_with_timeout(Arc::downgrade(&task), TimeSpec::now());
                 drop(task);
                 block_current_and_run_next();
-                // After resuming, check if we were woken by a signal
-                let task = current_task().unwrap();
-                let inner = task.acquire_inner_lock();
-                if !inner.sigpending.difference(inner.sigmask).is_empty() {
-                    drop(inner);
-                    drop(task);
-                    return read_size;
-                }
-                drop(inner);
-                drop(task);
+                // suspend_current_and_run_next();
                 continue;
             }
             // We guarantee that this operation will read at least one byte
@@ -361,16 +302,12 @@ impl File for Pipe {
                     if ring.head == ring.tail {
                         ring.status = RingBufferStatus::EMPTY;
                         read_size += buf_start;
-                        drop(ring);
-                        // wake_all_interruptible removed - too aggressive
                         return read_size;
                     }
                 }
                 read_size += buf_start;
             }
             ring.status = RingBufferStatus::NORMAL;
-            drop(ring);
-            // wake_all_interruptible removed - too aggressive
             return read_size;
         }
     }
@@ -395,26 +332,10 @@ impl File for Pipe {
                 }
                 drop(ring);
                 let task = current_task().unwrap();
-                let inner = task.acquire_inner_lock();
-                if !inner.sigpending.difference(inner.sigmask).is_empty() {
-                    drop(inner);
-                    drop(task);
-                    return write_size;
-                }
-                drop(inner);
                 wait_with_timeout(Arc::downgrade(&task), TimeSpec::now());
                 drop(task);
                 block_current_and_run_next();
-                // After resuming, check if we were woken by a signal
-                let task = current_task().unwrap();
-                let inner = task.acquire_inner_lock();
-                if !inner.sigpending.difference(inner.sigmask).is_empty() {
-                    drop(inner);
-                    drop(task);
-                    return write_size;
-                }
-                drop(inner);
-                drop(task);
+                // suspend_current_and_run_next();
                 continue;
             }
             // We guarantee that this operation will write at least one byte
@@ -427,16 +348,12 @@ impl File for Pipe {
                     if ring.head == ring.tail {
                         ring.status = RingBufferStatus::FULL;
                         write_size += buf_start;
-                        drop(ring);
-                        // wake_all_interruptible removed - too aggressive
                         return write_size;
                     }
                 }
                 write_size += buf_start;
             }
             ring.status = RingBufferStatus::NORMAL;
-            drop(ring);
-            // wake_all_interruptible removed - too aggressive
             return write_size;
         }
     }
