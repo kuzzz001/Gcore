@@ -1010,18 +1010,36 @@ impl<T: PageTable> MemorySet<T> {
                     &mut self.areas[idx]
                 } else if start_vpn == area_start_vpn {
                     trace!("[mprotect] change prot of lower part");
-                    let second = self.areas[idx].into_two(end_vpn).unwrap();
+                    let second = match self.areas[idx].into_two(end_vpn) {
+                        Ok(s) => s,
+                        Err(_) => {
+                            warn!("[mprotect] into_two(lower) failed");
+                            return Err(ENOMEM);
+                        }
+                    };
                     self.areas.insert(idx + 1, second);
                     // important, keep the order of areas
                     &mut self.areas[idx]
                 } else if end_vpn == area_end_vpn {
                     trace!("[mprotect] change prot of higher part");
-                    let second = self.areas[idx].into_two(start_vpn).unwrap();
+                    let second = match self.areas[idx].into_two(start_vpn) {
+                        Ok(s) => s,
+                        Err(_) => {
+                            warn!("[mprotect] into_two(higher) failed");
+                            return Err(ENOMEM);
+                        }
+                    };
                     self.areas.insert(idx + 1, second);
                     &mut self.areas[idx + 1]
                 } else {
                     trace!("[mprotect] change prot of internal part, call into_three");
-                    let (second, third) = self.areas[idx].into_three(start_vpn, end_vpn).unwrap();
+                    let (second, third) = match self.areas[idx].into_three(start_vpn, end_vpn) {
+                        Ok(v) => v,
+                        Err(_) => {
+                            warn!("[mprotect] into_three failed start={:#x} end={:#x}", start_vpn.0, end_vpn.0);
+                            return Err(ENOMEM);
+                        }
+                    };
                     self.areas.insert(idx + 1, second);
                     self.areas.insert(idx + 2, third);
                     &mut self.areas[idx + 1]
