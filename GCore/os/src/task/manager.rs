@@ -11,7 +11,7 @@ use alloc::vec::Vec;
 
 use crate::timer::TimeSpec;
 
-use super::{current_task, TaskControlBlock};
+use super::{current_task, TaskControlBlock, TaskStatus};
 use alloc::collections::{BinaryHeap, VecDeque};
 use alloc::sync::{Arc, Weak};
 use lazy_static::*;
@@ -198,6 +198,21 @@ impl TaskManager {
             Err(WaitQueueError::AlreadyWaken)
         }
     }
+    /// 唤醒可中断队列中的所有任务，将它们移到就绪队列。
+    /// 用于 pipe 等场景：读写端操作完成后通知对端不再阻塞。
+    pub fn wake_all_interruptible(&mut self) {
+        while let Some(task) = self.interruptible_queue.pop_front() {
+            let mut inner = task.acquire_inner_lock();
+            if inner.task_status == TaskStatus::Interruptible {
+                inner.task_status = TaskStatus::Ready;
+                drop(inner);
+                self.ready_queue.push_back(task);
+            } else {
+                drop(inner);
+            }
+        }
+    }
+
     #[allow(unused)]
     /// 调试方法
     /// 打印就绪队列中的任务ID
@@ -303,6 +318,11 @@ pub fn sleep_interruptible(task: Arc<TaskControlBlock>) {
 /// 这个函数不会改变`task_status`，你应该手动改变它以保持一致性。
 pub fn wake_interruptible(task: Arc<TaskControlBlock>) {
     TASK_MANAGER.lock().wake_interruptible(task)
+}
+
+/// 唤醒所有可中断队列中的任务
+pub fn wake_all_interruptible() {
+    TASK_MANAGER.lock().wake_all_interruptible()
 }
 
 /// # 警告
