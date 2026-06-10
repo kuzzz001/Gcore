@@ -347,8 +347,23 @@ impl File for TcpSocket {
         NET_INTERFACE.poll();
         ret
     }
-    fn r_ready(&self) -> bool{true}
-    fn w_ready(&self) -> bool{true}
+    fn r_ready(&self) -> bool {
+        // Check if there's actually a pending connection (for listen sockets)
+        // or data available (for connected sockets)
+        NET_INTERFACE.tcp_socket(self.socket_handler, |socket| {
+            if socket.state() == tcp::State::SynReceived
+                || socket.state() == tcp::State::Established
+            {
+                true
+            } else {
+                // Check if data available
+                socket.can_recv()
+            }
+        })
+    }
+    fn w_ready(&self) -> bool {
+        NET_INTERFACE.tcp_socket(self.socket_handler, |socket| socket.can_send())
+    }
     fn read_user(&self, _offset: Option<usize>, buf: UserBuffer) -> usize{
         let mut buffers = buf.buffers;
         let buf = unsafe { core::slice::from_raw_parts_mut(buffers[0].as_mut_ptr() as *mut u8, buf.len as usize) };

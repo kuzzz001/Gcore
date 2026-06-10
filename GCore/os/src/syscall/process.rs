@@ -1097,6 +1097,20 @@ pub fn sys_mprotect(addr: usize, len: usize, prot: usize) -> isize {
     }
 }
 
+/// mlock/mlockall/munlock/munlockall stubs — no swap, always succeed
+pub fn sys_mlock(_addr: usize, _len: usize) -> isize {
+    SUCCESS
+}
+pub fn sys_munlock(_addr: usize, _len: usize) -> isize {
+    SUCCESS
+}
+pub fn sys_mlockall(_flags: usize) -> isize {
+    SUCCESS
+}
+pub fn sys_munlockall() -> isize {
+    SUCCESS
+}
+
 pub fn sys_clock_gettime(clk_id: usize, tp: *mut TimeSpec) -> isize {
     if !tp.is_null() {
         let token = current_user_token();

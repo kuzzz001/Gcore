@@ -755,6 +755,7 @@ fn init_device_directory() {
     let mut lock = dev_inode.children.write();
     lock.as_mut().unwrap().insert("null".to_string(), null_dev);
     lock.as_mut().unwrap().insert("zero".to_string(), zero_dev);
+    lock.as_mut().unwrap().insert("urandom".to_string(), urandom_dev);
     lock.as_mut().unwrap().insert("tty".to_string(), tty_dev);
     drop(lock);
 

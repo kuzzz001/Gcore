@@ -100,12 +100,11 @@ pub  fn sys_connect(sockfd: u32, addr: usize, addrlen: u32) -> isize {
     let nonblock = task.files.lock().get_ref(sockfd as usize)
         .map(|fd| fd.get_nonblock())
         .unwrap_or(false);
-    if nonblock {
-        return EINPROGRESS;
-    }
     let socket = get_socket!(sockfd);
     match socket.connect(addr_buf) {
         Ok(v) => v as isize,
+        // For nonblocking sockets, connection in progress is expected
+        Err(e) if nonblock => EINPROGRESS,
         Err(e) => -(e as isize),
     }
 }
