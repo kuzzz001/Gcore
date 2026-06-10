@@ -2,13 +2,13 @@ use super::inode::DiskInodeType;
 use super::vfs::VFS;
 use super::{
     cache::BlockCacheManager,
-    dev::{null::Null, tty::Teletype, zero::Zero},
+    dev::{null::Null, tty::Teletype, zero::Zero, urandom::Urandom, proc_meminfo::ProcMeminfo},
     file_trait::File,
     filesystem::FileSystem,
     layout::OpenFlags,
     Hwclock,
 };
-use crate::fs::dev::urandom::Urandom;
+use crate::fs::dev::Hwclock;
 use crate::fs::fat32::FatOSInode;
 #[cfg(feature = "oom_handler")]
 use crate::mm::tlb_invalidate;
@@ -789,10 +789,23 @@ fn init_proc_directory() {
         _ => {}
     }
     println!("[kernel] init_proc_directory successfully!");
-    match ROOT.open("/proc/meminfo", OpenFlags::O_CREAT, false) {
-        _ => {}
-    }
+
+    let proc_inode = match ROOT.cd_path("/proc") {
+        Ok(inode) => inode,
+        Err(_) => panic!("proc directory doesn't exist"),
+    };
+
+    let meminfo_dev = DirectoryTreeNode::new(
+        "meminfo".to_string(),
+        Arc::new(FileSystem::new(FS_Type::Null)),
+        Arc::new(ProcMeminfo {}),
+        Arc::downgrade(&proc_inode.get_arc()),
+    );
+    let mut lock = proc_inode.children.write();
+    lock.as_mut().unwrap().insert("meminfo".to_string(), meminfo_dev);
+    drop(lock);
     println!("[kernel] init_proc_meminfo_directory successfully!");
+
     match ROOT.open("/proc/mounts", OpenFlags::O_CREAT, false) {
         _ => {}
     }

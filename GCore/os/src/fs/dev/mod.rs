@@ -1,6 +1,7 @@
 pub mod hwclock;
 pub mod null;
 pub mod pipe;
+pub mod proc_meminfo;
 pub mod socket;
 pub mod tty;
 pub mod zero;
