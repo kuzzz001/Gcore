@@ -752,6 +752,7 @@ fn init_device_directory() {
 
     println!("[kernel] tty_dev init successfully!");
     let mut lock = dev_inode.children.write();
+    dev_inode.cache_all_subfile(&mut lock).ok();
     lock.as_mut().unwrap().insert("null".to_string(), null_dev);
     lock.as_mut().unwrap().insert("zero".to_string(), zero_dev);
     lock.as_mut().unwrap().insert("urandom".to_string(), urandom_dev);
@@ -801,6 +802,7 @@ fn init_proc_directory() {
         Arc::downgrade(&proc_inode.get_arc()),
     );
     let mut lock = proc_inode.children.write();
+    proc_inode.cache_all_subfile(&mut lock).ok();
     lock.as_mut().unwrap().insert("meminfo".to_string(), meminfo_dev);
     drop(lock);
     println!("[kernel] init_proc_meminfo_directory successfully!");

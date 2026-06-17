@@ -43,7 +43,6 @@ SECTIONS
         *(.bss.stack)
         sbss = .;
         *(.bss .bss.*)
-        *(.bss.secondary_stacks)
         *(.sbss .sbss.*)
     }
 

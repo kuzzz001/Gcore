@@ -9,15 +9,14 @@ _start:
 _secondary_start:
     # Secondary hart entry: set up per-hart stack then call rust_secondary
     # tp register already contains the hart ID (set by OpenSBI)
-    # Compute per-hart stack pointer: stack_base + (hart_id + 1) * STACK_SIZE
+    # Compute per-hart stack pointer: stack_base + hart_id * STACK_SIZE
     # secondary_stacks is the per-hart stack area
-    li t0, 65536    # 4096 * 16 = stack size per hart
-    mv t1, tp       # hart_id
-    addi t1, t1, 0  # hart_id as offset
-    mul t1, t1, t0  # hart_id * stack_size
+    # STACK_SIZE = 4096 * 16 = 65536 = 2^16, use slli instead of mul (no M ext needed)
+    slli t1, tp, 16   # hart_id * 65536
     la t0, secondary_stacks
     add sp, t0, t1
-    addi sp, sp, 65536  # sp at top of stack
+    li t0, 65536
+    add sp, sp, t0     # sp at top of stack
     call rust_secondary
 
     .section .bss.stack
