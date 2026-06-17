@@ -1,4 +1,4 @@
-use crate::fs::directory_tree::{FILE_SYSTEM, GLOBAL_BLOCK_SIZE};
+use crate::fs::directory_tree::GLOBAL_BLOCK_SIZE;
 
 use super::*;
 use alloc::vec::Vec;
@@ -7,7 +7,6 @@ use block_group::Block;
 use ext4fs::Ext4FileSystem;
 use path::path_check;
 use spin::RwLock;
-use crate::timer::get_time_sec;
 
 pub struct Ext4FileContent {
     /// The size of the file.

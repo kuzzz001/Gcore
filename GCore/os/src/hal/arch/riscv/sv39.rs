@@ -9,6 +9,8 @@ pub fn tlb_invalidate() {
     unsafe {
         asm!("sfence.vma");
     }
+    // SMP TLB shootdown: broadcast to all harts
+    crate::hal::arch::riscv::sbi::remote_sfence_vma(0, 0);
 }
 bitflags! {
     /// Page Table Entry flags

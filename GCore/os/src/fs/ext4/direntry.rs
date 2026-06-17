@@ -1,6 +1,6 @@
 use core::{convert::TryFrom, fmt::Debug, intrinsics::size_of};
 
-use crate::fs::directory_tree::{FILE_SYSTEM, GLOBAL_BLOCK_SIZE};
+use crate::fs::directory_tree::GLOBAL_BLOCK_SIZE;
 
 use super::block_group::Block;
 use super::ext4fs::Ext4FileSystem;
@@ -10,7 +10,6 @@ use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use error::{Errno, Ext4Error};
-use isomorphic_drivers::block;
 
 bitflags! {
     // #[derive(PartialEq, Eq)]

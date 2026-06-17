@@ -1,9 +1,7 @@
 use core::cmp::min;
 
 use alloc::vec::Vec;
-use alloc::vec;
 
-use crate::fs::directory_tree::GLOBAL_BLOCK_SIZE;
 use crate::fs::ext4::bitmap::{ext4_bmap_bit_find_clr, ext4_bmap_bit_set, ext4_bmap_is_bit_clr};
 use crate::fs::ext4::block_group::{Block, Ext4BlockGroup};
 use crate::fs::ext4::error::Errno;

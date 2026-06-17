@@ -42,6 +42,14 @@ pub fn console_getchar() -> usize {
 
 pub fn console_flush() {}
 
+pub fn send_ipi(hart_mask: usize) {
+    sbi_call(SBI_SEND_IPI, hart_mask, 0, 0);
+}
+
+pub fn remote_sfence_vma(start: usize, size: usize) {
+    sbi_call(SBI_REMOTE_SFENCE_VMA, start, size, 0);
+}
+
 pub fn shutdown() -> ! {
     sbi_call(SBI_SHUTDOWN, 0, 0, 0);
     panic!("It should shutdown!");

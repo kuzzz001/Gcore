@@ -39,6 +39,8 @@ smoltcp = { version = "0.10.0", default-features = false, features = [
     "socket-udp",
     "socket-tcp",
     "socket-dhcpv4",
+    "socket-raw",
+    "socket-icmp",
     "async",
 ] }
 
@@ -59,6 +61,9 @@ block_mem = []
 block_virt = []
 block_virt_pci = []
 comp = []
+board_k210 = []
+board_fu740 = []
+board_cv1811h = []
 
 # LoongArch Boards:
 loongarch64 = []
@@ -71,7 +76,7 @@ board_rvqemu = ["oom_handler", "riscv"]
 
 # default = ["board_laqemu", "block_sata"]
 # default = ["board_rvqemu", "block_mem"]
-default = ["board_rvqemu", "block_virt"]
+default = ["board_rvqemu", "block_virt", "oom_handler"]
 
 [profile.dev]
 opt-level = "s"

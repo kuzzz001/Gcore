@@ -100,7 +100,7 @@ impl TrapContext {
         kernel_sp: usize,
         trap_handler: usize,
     ) -> Self {
-        let mut sstatus = sstatus::read();
+        let sstatus = sstatus::read();
         // set CPU privilege to User after trapping back
         unsafe {
             set_spp(SPP::User);

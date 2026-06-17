@@ -1,6 +1,7 @@
 pub mod config;
 pub mod kern_stack;
 pub mod sbi;
+pub mod smp;
 pub mod sv39;
 pub mod switch;
 pub mod time;

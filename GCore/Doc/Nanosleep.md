@@ -1,12 +1,15 @@
-# Nanosleep
+# Nanosleep / Clock Nanosleep
 
-Nanosleep 是一种精确到纳秒级别的睡眠系统调用，允许用户进程挂起自身执行一段指定的时间，用于实现延时、轮询节流、定时调度等功能。
+`clock_nanosleep` 是 Linux 中精确到纳秒级别的睡眠系统调用，允许用户进程挂起自身一段指定时间，用于延时、轮询节流、定时调度等场景。支持**相对时间**和**绝对时间（TIMER_ABSTIME）**两种模式。
 
-## Gcore 的 nanosleep 实现
+## Gcore 实现
 
-我们在 Gcore 内核中支持使用 `sys_clock_nanosleep` 接口实现精确睡眠。该接口支持 CLOCK_REALTIME 和 CLOCK_MONOTONIC 等基础时钟（暂未完全支持全部 Linux 时钟），并允许通过 flags 指定是否为中断唤醒等行为。
+Gcore 完整实现了 `sys_clock_nanosleep`，包含以下全部功能：
 
-目前我们只支持进程自身的主动挂起，不支持中断唤醒和剩余时间返回。
+- CLOCK_REALTIME / CLOCK_MONOTONIC 等多时钟源
+- `TIMER_ABSTIME` 绝对时间唤醒
+- 阻塞等待 + 超时自动唤醒
+- 被信号中断时返回剩余时间（`rmtp`）
 
 ## 接口定义
 
@@ -19,42 +22,78 @@ pub fn sys_clock_nanosleep(
 ) -> isize
 ```
 
-- `clk_id`: 时钟源，一般为 `0` 表示 CLOCK_REALTIME。
-- `flags`: 目前未使用，可用于将来支持 TIMER_ABSTIME 等标志。
-- `rqtp`: 需要睡眠的时间指针，类型为 `TimeSpec`。
-- `rmtp`: 睡眠被中断时返回剩余时间（当前未实现，传入将被忽略）。
+参数：
+
+- `clk_id`：时钟源，0=CLOCK_REALTIME，1=CLOCK_MONOTONIC，5=CLOCK_REALTIME_COARSE 等
+- `flags`：`TIMER_ABSTIME=0x01` 时表示 `rqtp` 为绝对唤醒时间，否则为相对时长
+- `rqtp`：请求的睡眠时间（`TimeSpec` 结构体指针）
+- `rmtp`：若被信号中断，返回剩余时间
 
 返回值：
 
-- 成功返回 `SUCCESS`。
-- 参数非法或翻译失败返回负的错误码。
+- `SUCCESS (0)`：睡眠正常超时
+- `EINVAL`：参数非法（指针为空、tv_nsec ≥ 1e9）
+- `EINTR`：被信号中断，`rmtp` 已写入剩余时间
 
-## 实现方式
+## 实现机制
 
-我们通过内核调度器支持的 **阻塞睡眠队列** 机制实现 nanosleep。具体流程如下：
+### 相对时间模式（flags 不带 TIMER_ABSTIME）
 
-1. 内核接收到 `sys_clock_nanosleep` 请求；
-2. 从用户空间读取 `TimeSpec` 结构；
-3. 将当前进程加入定时阻塞队列，设置超时时间；
-4. 调度器自动在超时时间后唤醒该进程；
-5. 如果中途被唤醒（尚未支持），将返回错误码并设置 `rmtp`。
-
-目前实现中，我们主要支持基于 **CLOCK_MONOTONIC** 的相对时间睡眠，使用系统时间戳加上目标纳秒数实现计时控制。
-
-## 数据结构
-
-```rust
-pub struct TimeSpec {
-    pub tv_sec: usize,
-    pub tv_nsec: usize,
-}
+```
+rqtp → 计算 end = TimeSpec::now() + rqtp
+     → wait_with_timeout(end)  注册到全局超时队列
+     → block_current_and_run_next()  让出 CPU
+     → 超时定时器中断 → 唤醒 → 返回 SUCCESS
+     → 或被信号中断 → 计算剩余 = end - now → 写入 rmtp → 返回 EINTR
 ```
 
-所有 `nanosleep` 的请求都会先被转换为目标唤醒时间（单位为内核时钟节拍或纳秒），并插入到调度器管理的定时器队列中。
+### 绝对时间模式（flags & TIMER_ABSTIME）
 
-## 注意事项
+```
+rqtp 为绝对 Unix 时间或单调时间
+CLOCK_REALTIME (0/5)：rqtp 是 Unix 绝对时间
+  → current_time() 转 Unix 纳秒 → 计算 remaining = rqtp - now
+  → end = TimeSpec::now() + TimeSpec::from_ns(remaining)
 
-- 当前实现不支持被信号中断的中断返回（不支持 `rmtp`）；
-- 所有时间都以内核启动时间为参考点，非绝对时间；
-- 多线程环境下，若线程调用 nanosleep，将仅挂起该线程；
-- 若传入非法指针或超大时间，系统将拒绝处理并返回错误码。
+CLOCK_MONOTONIC (1/4/6/7)：rqtp 已是 boot-time 兼容
+  → 直接 end = rqtp，若已过期立即返回 SUCCESS
+```
+
+### 超时与信号交互
+
+```
+wait_with_timeout(task, end_time)
+  → 插入全局 TIMEOUT_WAITQUEUE，按 end_time 排序
+  → 定时器中断触发 do_wake_expired()
+    → 遍历队列，唤醒所有 end_time <= now 的任务
+
+信号到达：
+  → sigpending 非空 → 返回 EINTR
+  → rmtp 写入 end - now（剩余时间）
+```
+
+## 内核调用路径
+
+```
+trap_handler (SupervisorTimer)
+  → do_wake_expired()         // 定时器中断：检查超时队列
+  → set_next_trigger()
+  → suspend_current_and_run_next()
+
+用户态 sleep 线程恢复执行：
+  → sys_clock_nanosleep 返回 SUCCESS/EINTR
+```
+
+## 与 nanosleep 的关系
+
+`nanosleep(rqtp, rmtp)` 等价于 `clock_nanosleep(CLOCK_REALTIME, 0, rqtp, rmtp)` 的相对时间模式。
+
+## 相关结构体
+
+```rust
+#[repr(C)]
+pub struct TimeSpec {
+    pub tv_sec: usize,   // 秒
+    pub tv_nsec: usize,  // 纳秒 (< 1_000_000_000)
+}
+```

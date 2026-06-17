@@ -22,20 +22,25 @@ impl Drop for SwapTracker {
 pub struct Swap {
     bitmap: Vec<u64>,
     block_ids: Vec<usize>,
+    /// Whether swap is actually usable (false when no blocks allocated)
+    usable: bool,
 }
 const BLK_PER_PG: usize = PAGE_SIZE / BLOCK_SZ;
 const SWAP_SIZE: usize = 1024 * 1024;
 impl Swap {
     /// size: the number of megabytes in swap
     pub fn new(size: usize) -> Self {
-        let bit = size * (SWAP_SIZE / PAGE_SIZE); // 1MiB = 4KiB*256
-        let vec_len = bit / usize::MAX.count_ones() as usize;
+        let blocks = size * (SWAP_SIZE / BLOCK_SZ); // 1MiB = 512B * 2048
+        let allocated = FILE_SYSTEM.alloc_blocks(blocks);
+        let usable = !allocated.is_empty() && allocated.len() == blocks;
+        let bit = if usable { size * (SWAP_SIZE / PAGE_SIZE) } else { 0 }; // 1MiB = 4KiB*256
+        let vec_len = if usable { bit / usize::MAX.count_ones() as usize } else { 0 };
         let mut bitmap = Vec::<u64>::with_capacity(vec_len);
         bitmap.resize(bitmap.capacity(), 0);
-        let blocks = size * (SWAP_SIZE / BLOCK_SZ); // 1MiB = 512B * 2048
         Self {
             bitmap,
-            block_ids: FILE_SYSTEM.alloc_blocks(blocks),
+            block_ids: allocated,
+            usable,
         }
     }
     fn read_page(block_ids: &[usize], buf: &mut [u8]) {
@@ -66,15 +71,17 @@ impl Swap {
         &self.block_ids[swap_id * BLK_PER_PG + 0..swap_id * BLK_PER_PG + BLK_PER_PG]
     }
     pub fn read(&mut self, swap_id: usize, buf: &mut [u8]) {
+        if !self.usable { return; }
         Self::read_page(self.get_block_ids(swap_id), buf);
     }
-    pub fn write(&mut self, buf: &[u8]) -> Arc<SwapTracker> {
+    pub fn write(&mut self, buf: &[u8]) -> Option<Arc<SwapTracker>> {
+        if !self.usable { return None; }
         if let Some(swap_id) = self.alloc_page() {
             Self::write_page(self.get_block_ids(swap_id), buf);
             self.set_bit(swap_id);
-            Arc::new(SwapTracker(swap_id))
+            Some(Arc::new(SwapTracker(swap_id)))
         } else {
-            panic!("Swap space exhausted!");
+            None
         }
     }    
     #[inline(always)]

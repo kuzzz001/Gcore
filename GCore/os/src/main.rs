@@ -1,8 +1,15 @@
 #![no_std]
 #![no_main]
-#![feature(asm_const)]
+#![allow(
+    static_mut_refs,
+    internal_features,
+    dead_code,
+    unused_variables,
+    unused_imports,
+    unused_assignments,
+    unused_must_use
+)]
 #![feature(naked_functions)]
-#![feature(panic_info_message)]
 #![feature(alloc_error_handler)]
 #![feature(string_remove_matches)]
 #![feature(custom_test_frameworks)]
@@ -10,6 +17,7 @@
 #![feature(lang_items)]
 #![feature(trait_upcasting)]
 #![feature(core_intrinsics)]
+#![allow(unexpected_cfgs)]
 pub use hal::config;
 extern crate alloc;
 
@@ -111,10 +119,50 @@ pub fn rust_main() -> ! {
     println!("[kernel] oom_handler is enabled!");
     fs::flush_preload();
     task::add_initproc();
+
+    // Start secondary harts
+    smp_start_secondary_harts();
+
     // note that in run_tasks(), there is yet *another* pre_start_init(),
     // which is used to turn on interrupts in some archs like LoongArch.
     task::run_tasks();
     panic!("Unreachable in rust_main!");
+}
+
+/// Boot secondary harts via OpenSBI HSM
+fn smp_start_secondary_harts() {
+    use core::arch::asm;
+    extern "C" {
+        fn _secondary_start();
+    }
+    let entry = _secondary_start as usize;
+    for hart in 1..8 {
+        // OpenSBI HSM hart_start: a6=0 (hart_start), a0=hart_id, a1=entry, a2=opaque
+        let result: usize;
+        unsafe {
+            asm!(
+                "ecall",
+                in("a6") 0u32,
+                in("a0") hart,
+                in("a1") entry,
+                in("a2") 0usize,
+                lateout("a0") result,
+            );
+        }
+        if result == 0 {
+            println!("[kernel] hart {} started (entry={:#x})", hart, entry);
+        }
+    }
+}
+
+/// Secondary hart entry point
+#[no_mangle]
+pub extern "C" fn rust_secondary() -> ! {
+    use crate::hal::arch::riscv::smp;
+    crate::hal::arch::riscv::machine_init();
+    println!("[kernel] hart {} online", smp::hart_id());
+    crate::task::run_tasks();
+    panic!("Unreachable in rust_secondary!");
 }
 
 #[cfg(test)]

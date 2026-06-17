@@ -480,10 +480,10 @@ impl File for FatOSInode {
     }
 
     fn hang_up(&self) -> bool {
-        todo!()
+        false
     }
 
-    fn fcntl(&self, cmd: u32, arg: u32) -> isize {
-        todo!()
+    fn fcntl(&self, _cmd: u32, _arg: u32) -> isize {
+        crate::syscall::errno::EINVAL
     }
 }

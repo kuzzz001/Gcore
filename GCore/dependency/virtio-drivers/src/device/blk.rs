@@ -6,7 +6,6 @@ use crate::queue::VirtQueue;
 use crate::transport::Transport;
 use crate::{Error, Result};
 use bitflags::bitflags;
-use log::info;
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout};
 
 const QUEUE: u16 = 0;

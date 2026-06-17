@@ -20,7 +20,16 @@ use riscv::register::{
     sepc, sie, stval, stvec,
 };
 
-pub static mut TIMER_INTERRUPT: usize = 0;
+pub static mut TIMER_INTERRUPTS: [usize; 8] = [0; 8];
+
+/// Get per-hart timer interrupt count
+fn timer_interrupt_count() -> usize {
+    unsafe { TIMER_INTERRUPTS[crate::hal::arch::riscv::smp::hart_id()] }
+}
+fn inc_timer_interrupt() {
+    let id = crate::hal::arch::riscv::smp::hart_id();
+    unsafe { TIMER_INTERRUPTS[id] += 1; }
+}
 
 pub fn get_bad_addr() -> usize {
     stval::read()
@@ -131,15 +140,7 @@ pub fn trap_handler() -> ! {
         }
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
             do_wake_expired();
-            unsafe {
-                TIMER_INTERRUPT += 1;
-                // if TIMER_INTERRUPT % 100_000 == 0 {
-                let f = ROOT
-                    .open("/proc/interrupts", OpenFlags::O_CREAT, false)
-                    .unwrap();
-                f.write(None, format!("5: {}", TIMER_INTERRUPT).as_bytes());
-                // }
-            }
+            inc_timer_interrupt();
             set_next_trigger();
             suspend_current_and_run_next();
         }

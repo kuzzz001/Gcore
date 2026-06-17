@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 mod balloc;
 mod bitmap;
 mod block_group;

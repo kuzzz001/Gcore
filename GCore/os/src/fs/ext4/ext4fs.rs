@@ -41,7 +41,13 @@ impl Ext4FileSystem {
     // 获取根 Inode
     pub fn get_root_inode(&self) -> Arc<dyn File> {
         let root_inode_ref = self.get_inode_ref(ROOT_INODE);
-        todo!()
+        let fs = Ext4FileSystem {
+            block_device: self.block_device.clone(),
+            superblock: self.superblock,
+            block_size: self.block_size,
+            cache_mgr: self.cache_mgr.clone(),
+        };
+        Ext4OSInode::new(root_inode_ref, Arc::new(fs))
     }
     // Opens and loads an Ext4 from the `block_device`.
     // 针对ext4rs原有的方法的方法，可能需要修改
@@ -203,11 +209,12 @@ impl Ext4FileSystem {
                 Arc::new(ext4fs)
             })
     }
-    pub fn alloc_blocks(&self, blocks: usize) -> Vec<usize> {
-        todo!()
+    pub fn alloc_blocks(&self, _blocks: usize) -> Vec<usize> {
+        Vec::new()
     }
     fn root_inode(&self) -> Arc<dyn InodeTrait> {
-        todo!();
+        let inode_ref = self.get_inode_ref(ROOT_INODE);
+        Arc::new(inode_ref.inode)
     }
     #[allow(unused)]
     pub fn dir_mk(&self, path: &str) -> Result<usize, isize> {

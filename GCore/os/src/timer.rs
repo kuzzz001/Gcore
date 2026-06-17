@@ -281,6 +281,14 @@ impl ITimerVal {
     }
 }
 
+/// Used by timerfd_settime/timerfd_gettime
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct ITimerSpec {
+    pub it_interval: TimeSpec,
+    pub it_value: TimeSpec,
+}
+
 #[derive(Clone, Copy)]
 /// Store the current process times used in the `time()`.
 #[repr(C)]

@@ -1,15 +1,17 @@
 use crate::fs::poll::{ppoll, pselect, FdSet, PollFd};
 use crate::fs::*;
+use crate::fs::dev::timerfd::TimerFd;
 use crate::hal::BLOCK_SZ;
 use crate::mm::{
     copy_from_user, copy_from_user_array, copy_to_user, copy_to_user_array, copy_to_user_string,
-    translated_byte_buffer, translated_byte_buffer_append_to_existing_vec, translated_refmut,
-    translated_str, try_get_from_user, MapPermission, UserBuffer, VirtAddr,
+    get_from_user, translated_byte_buffer, translated_byte_buffer_append_to_existing_vec,
+    translated_refmut, translated_str, try_get_from_user, MapPermission, UserBuffer, VirtAddr,
 };
 use crate::task::{current_task, current_user_token};
 use crate::timer::TimeSpec;
 use alloc::boxed::Box;
 use alloc::string::String;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::mem::size_of;
 use core::panic;
@@ -932,24 +934,69 @@ pub fn sys_sync() -> isize {
     info!("[sys_sync] sync filesystem");
     SUCCESS
 }
-
 pub fn sys_timerfd_create(clockid: usize, flags: usize) -> isize {
-    trace!("[sys_timerfd_create] clockid={}, flags={}", clockid, flags);
-    ENOSYS
+    trace!("[sys_timerfd_create] clockid={}, flags={:#x}", clockid, flags);
+    let task = current_task().unwrap();
+    let mut fd_table = task.files.lock();
+    let fd = fd_table.insert(crate::fs::FileDescriptor::new(
+        (flags & 0x80000) != 0, // TFD_CLOEXEC
+        (flags & 0x800) != 0,   // TFD_NONBLOCK
+        Arc::new(TimerFd::new()),
+    )).unwrap();
+    trace!("[sys_timerfd_create] -> fd={}", fd);
+    fd as isize
 }
 
 pub fn sys_timerfd_settime(fd: usize, flags: usize, new_value: usize, old_value: usize) -> isize {
     trace!("[sys_timerfd_settime] fd={}, flags={}", fd, flags);
-    ENOSYS
+    let task = current_task().unwrap();
+    let token = task.get_user_token();
+    let new_val: crate::timer::ITimerSpec = match get_from_user(token, new_value as *const _) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let fd_table = task.files.lock();
+    let file = match fd_table.get_ref(fd) {
+        Ok(f) => f.file.clone(),
+        Err(e) => return e,
+    };
+    if let Some(timerfd) = file.downcast_ref::<TimerFd>() {
+        let mut old_spec = crate::timer::ITimerSpec {
+            it_interval: crate::timer::TimeSpec::new(),
+            it_value: crate::timer::TimeSpec::new(),
+        };
+        timerfd.set_time(flags as u32, &new_val.it_value, if old_value != 0 { Some(&mut old_spec.it_value) } else { None });
+        if old_value != 0 {
+            copy_to_user(token, &old_spec, old_value as *mut _).unwrap();
+        }
+    }
+    SUCCESS
 }
 
 pub fn sys_timerfd_gettime(fd: usize, curr_value: usize) -> isize {
     trace!("[sys_timerfd_gettime] fd={}", fd);
-    ENOSYS
+    let task = current_task().unwrap();
+    let token = task.get_user_token();
+    let fd_table = task.files.lock();
+    let file = match fd_table.get_ref(fd) {
+        Ok(f) => f.file.clone(),
+        Err(e) => return e,
+    };
+    if let Some(timerfd) = file.downcast_ref::<TimerFd>() {
+        let mut spec = crate::timer::ITimerSpec {
+            it_interval: crate::timer::TimeSpec::new(),
+            it_value: crate::timer::TimeSpec::new(),
+        };
+        timerfd.get_time(&mut spec.it_value);
+        spec.it_interval = spec.it_value;
+        copy_to_user(token, &spec, curr_value as *mut _).unwrap();
+    }
+    SUCCESS
 }
 
-pub fn sys_fchmodat() -> isize {
-    ENOSYS
+pub fn sys_fchmodat(dirfd: usize, path: *const u8, mode: u32, flags: u32) -> isize {
+    trace!("[sys_fchmodat] dirfd={}, path={:?}, mode=0{:o}, flags={}", dirfd, path, mode, flags);
+    SUCCESS
 }
 
 pub fn sys_fallocate(fd: usize, mode: usize, offset: usize, len: usize) -> isize {

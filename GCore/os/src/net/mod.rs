@@ -1,18 +1,18 @@
 #[allow(unused)]
 use crate::{
     fs::{file_descriptor::FileDescriptor, file_trait::File, OpenFlags},
-    net::{tcp::TcpSocket, udp::UdpSocket},
+    net::{icmp::IcmpSocket, tcp::TcpSocket, udp::UdpSocket},
     task::current_task,
     utils::error::{GeneralRet, SyscallErr, SyscallRet},
 };
 use alloc::{collections::BTreeMap, sync::Arc};
-use log::info;
 use smoltcp::wire::{IpEndpoint, IpListenEndpoint};
 
 use spin::Mutex;
 
 pub mod address;
 pub mod config;
+mod icmp;
 mod tcp;
 mod udp;
 mod unix;
@@ -42,6 +42,8 @@ bitflags! {
         const SOCK_STREAM = 1 << 0;
         /// for UDP
         const SOCK_DGRAM = 1 << 1;
+        /// for raw sockets (ICMP etc)
+        const SOCK_RAW = 1 << 2;
         /// unused now
         const SOCK_CLOEXEC = 1 << 19;
         const SOCK_NONBLOCK = 0x800;
@@ -71,7 +73,22 @@ pub trait Socket: File {
 
 impl dyn Socket {
     pub fn alloc(domain: u32, socket_type: u32) -> GeneralRet<usize> {
-        log::info!("[Socket::new] domain: {}", domain);
+        log::info!("[Socket::new] domain: {}, type: {}", domain, socket_type);
+        // SOCK_RAW=3 conflicts with bitflags SOCK_STREAM|SOCK_DGRAM, handle first
+        if socket_type == 3 {
+            // SOCK_RAW
+            match domain as u16 {
+                AF_INET | AF_INET6 => {
+                    let socket = icmp::IcmpSocket::new();
+                    let socket = Arc::new(socket);
+                    let current_tcb = current_task().unwrap();
+                    let fd = current_tcb.files.lock().insert(FileDescriptor::new(false, false, socket.clone())).unwrap();
+                    current_tcb.socket_table.lock().insert(fd, socket);
+                    return Ok(fd);
+                }
+                _ => return Err(SyscallErr::EAFNOSUPPORT),
+            }
+        }
         match domain as u16 {
             AF_INET | AF_INET6 => {
                 let socket_type = SocketType::from_bits(socket_type).ok_or(SyscallErr::EINVAL)?;

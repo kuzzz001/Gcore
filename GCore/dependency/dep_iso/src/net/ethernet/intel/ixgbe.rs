@@ -307,7 +307,7 @@ impl<P: Provider> IXGBE<P> {
         info!("ixgbe: interface setup begin");
 
         let (recv_queue_va, recv_queue_pa) = P::alloc_dma(IXGBE_RECV_QUEUE_SIZE);
-        let mut recv_queue = unsafe {
+        let recv_queue = unsafe {
             slice::from_raw_parts_mut(recv_queue_va as *mut IXGBERecvDesc, IXGBE_RECV_DESC_NUM)
         };
         let mut recv_buffers = [0; IXGBE_RECV_DESC_NUM];

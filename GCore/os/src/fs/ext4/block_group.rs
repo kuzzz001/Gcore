@@ -3,7 +3,7 @@ use core::panic;
 use super::{
     crc::{ext4_crc32c, EXT4_CRC32_INIT}, superblock::Ext4Superblock, BlockDevice, BLOCK_SIZE, EXT4_MAX_BLOCK_GROUP_DESCRIPTOR_SIZE, EXT4_MIN_BLOCK_GROUP_DESCRIPTOR_SIZE
 };
-use crate::fs::directory_tree::{FILE_SYSTEM, GLOBAL_BLOCK_SIZE};
+use crate::fs::directory_tree::GLOBAL_BLOCK_SIZE;
 use crate::math::is_power_of;
 use alloc::vec;
 use alloc::{sync::Arc, vec::Vec};

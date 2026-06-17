@@ -44,7 +44,7 @@
 #![cfg_attr(not(test), no_std)]
 #![deny(unused_must_use, missing_docs, clippy::undocumented_unsafe_blocks)]
 #![allow(clippy::identity_op)]
-#![allow(dead_code)]
+#![allow(dead_code, stable_features)]
 #![feature(raw_ref_op)]
 
 #[cfg(any(feature = "alloc", test))]

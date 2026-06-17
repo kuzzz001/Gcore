@@ -61,19 +61,23 @@ impl Frame {
         }
     }
     pub fn gen_id(&mut self, frame_ref: &mut Arc<FrameTracker>) -> usize {
-        let swap_tracker = SWAP_DEVICE.lock().write(frame_ref.ppn.get_bytes_array());
-        swap_tracker.0
+        SWAP_DEVICE.lock().write(frame_ref.ppn.get_bytes_array())
+            .map(|t| t.0)
+            .unwrap_or(0)
     }
     #[cfg(feature = "oom_handler")]
     pub fn swap_out(&mut self) -> Result<usize, MemoryError> {
         match self {
             Frame::InMemory(frame_ref) => {
                 if Arc::strong_count(frame_ref) == 1 {
-                    let swap_tracker = SWAP_DEVICE.lock().write(frame_ref.ppn.get_bytes_array());
-                    let swap_id = swap_tracker.0;
-                    // frame_tracker should be dropped
-                    *self = Frame::SwappedOut(swap_tracker);
-                    Ok(swap_id)
+                    match SWAP_DEVICE.lock().write(frame_ref.ppn.get_bytes_array()) {
+                        Some(swap_tracker) => {
+                            let swap_id = swap_tracker.0;
+                            *self = Frame::SwappedOut(swap_tracker);
+                            Ok(swap_id)
+                        }
+                        None => Err(MemoryError::SwapIsFull),
+                    }
                 } else {
                     Err(MemoryError::SharedPage)
                 }
@@ -88,12 +92,14 @@ impl Frame {
     pub fn force_swap_out(&mut self) -> Result<usize, MemoryError> {
         match self {
             Frame::InMemory(frame_ref) => {
-                let swap_tracker = SWAP_DEVICE.lock().write(frame_ref.ppn.get_bytes_array());
-                //let swap_id = self.gen_id();
-                let swap_id = swap_tracker.0;
-                // frame_tracker should be dropped
-                *self = Frame::SwappedOut(swap_tracker);
-                Ok(swap_id)
+                match SWAP_DEVICE.lock().write(frame_ref.ppn.get_bytes_array()) {
+                    Some(swap_tracker) => {
+                        let swap_id = swap_tracker.0;
+                        *self = Frame::SwappedOut(swap_tracker);
+                        Ok(swap_id)
+                    }
+                    None => Err(MemoryError::SwapIsFull),
+                }
             }
             _ => Err(MemoryError::NotInMemory),
         }
@@ -832,7 +838,7 @@ impl MapArea {
                     trace!("[do_oom] swap out frame: {:?}, swap_id: {}", frame, swap_id);
                     continue;
                 }
-                Err(MemoryError::SharedPage) => continue,
+                Err(MemoryError::SharedPage) | Err(MemoryError::SwapIsFull) => continue,
                 _ => unreachable!(),
             }
         }
@@ -849,13 +855,10 @@ impl MapArea {
                 Ok(swap_id) => {
                     page_table.unmap(VirtPageNum::from(start_vpn.0 + idx as usize));
                     self.inner.swapped += 1;
-                    trace!(
-                        "[force_swap] swap out frame: {:?}, swap_id: {}",
-                        frame,
-                        swap_id
-                    );
+                    trace!("[force_swap] swap out frame: {:?}, swap_id: {}", frame, swap_id);
                     continue;
                 }
+                Err(MemoryError::SwapIsFull) => continue,
                 _ => unreachable!(),
             }
         }

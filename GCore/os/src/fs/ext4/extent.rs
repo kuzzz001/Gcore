@@ -4,7 +4,7 @@ use core::{convert::TryInto, intrinsics::size_of};
 use super::block_group::Block;
 use super::ext4fs::Ext4FileSystem;
 use super::*;
-use crate::fs::directory_tree::{FILE_SYSTEM, GLOBAL_BLOCK_SIZE};
+use crate::fs::directory_tree::GLOBAL_BLOCK_SIZE;
 use crate::syscall::errno::SUCCESS;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -289,7 +289,7 @@ impl ExtentNode {
                 while l <= r {
                     let m = l + (r - l) / 2;
                     let offset = size_of::<Ext4ExtentHeader>() + m * size_of::<Ext4Extent>();
-                    let mut ext = Ext4Extent::load_from_u8_mut(&mut internal_data[offset..]);
+                    let ext = Ext4Extent::load_from_u8_mut(&mut internal_data[offset..]);
 
                     if lblock < ext.first_block {
                         r = m - 1;
@@ -299,7 +299,7 @@ impl ExtentNode {
                 }
 
                 let offset = size_of::<Ext4ExtentHeader>() + (l - 1) * size_of::<Ext4Extent>();
-                let mut ext = Ext4Extent::load_from_u8_mut(&mut internal_data[offset..]);
+                let ext = Ext4Extent::load_from_u8_mut(&mut internal_data[offset..]);
                 Some((ext, l - 1))
             }
         }

@@ -1,115 +1,118 @@
 use super::{__switch, do_wake_expired};
 use super::{fetch_task, TaskStatus};
 use super::{TaskContext, TaskControlBlock};
+const MAX_HARTS: usize = 8;
+
+#[cfg(feature = "riscv")]
+use crate::hal::arch::riscv::smp;
+
+#[cfg(feature = "riscv")]
+fn hart_id() -> usize { smp::hart_id() }
+
+#[cfg(not(feature = "riscv"))]
+fn hart_id() -> usize { 0 }
 use crate::hal::TrapContext;
 use alloc::sync::Arc;
-use lazy_static::*;
 use spin::Mutex;
+use lazy_static::lazy_static;
 
-/// 处理器对象
+/// 每个 hart 的独立 Processor 对象
 pub struct Processor {
-    /// 当前正在运行的任务
     current: Option<Arc<TaskControlBlock>>,
-    /// 空闲任务的上下文，用于在任务切换时保存和恢复状态
     idle_task_cx: TaskContext,
 }
 
 impl Processor {
-    /// 构造函数
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
-            // 初始化时处理器为空闲
             current: None,
-            // 空闲任务的上下文
             idle_task_cx: TaskContext::zero_init(),
         }
     }
-    /// 获取空闲任务的上下文指针
+
     fn get_idle_task_cx_ptr(&mut self) -> *mut TaskContext {
         &mut self.idle_task_cx as *mut _
     }
-    /// 取出当前正在运行的任务
+
     pub fn take_current(&mut self) -> Option<Arc<TaskControlBlock>> {
-        // 将current字段置空，并返回其中的值
         self.current.take()
     }
-    /// 获取当前正在运行的任务的克隆
+
     pub fn current(&self) -> Option<Arc<TaskControlBlock>> {
         self.current.as_ref().map(Arc::clone)
-    }
-    /// 检查当前 Processor 是否为空闲
-    pub fn is_vacant(&self) -> bool {
-        self.current.is_none()
     }
 }
 
 lazy_static! {
-    /// 全局的处理器对象
-    /// 使用 Mutex 包装以确保多线程安全
-    pub static ref PROCESSOR: Mutex<Processor> = Mutex::new(Processor::new());
+    static ref PROCESSORS: Mutex<[Processor; MAX_HARTS]> = Mutex::new([
+        Processor::new(), Processor::new(), Processor::new(), Processor::new(),
+        Processor::new(), Processor::new(), Processor::new(), Processor::new(),
+    ]);
 }
 
-/// 运行任务调度
-/// # 作用
-/// 运行任务调度器，不断从任务队列中取出任务并运行
+/// 每个 hart 的核心调度循环
 pub fn run_tasks() {
+    let is_primary = hart_id() == 0;
     loop {
-        // 获取全局处理器对象
-        let mut processor = PROCESSOR.lock();
-        // 尝试从全局变量 TASK_MANAGER 中取出一个任务
-        if let Some(task) = fetch_task() {
-            // 获取当前空闲任务的上下文指针
-            let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
-            // 独占地访问即将运行的任务的 TCB
-            let next_task_cx_ptr = {
-                let mut task_inner = task.acquire_inner_lock();
-                task_inner.task_status = TaskStatus::Running;
-                &task_inner.task_cx as *const TaskContext
-            };
-            // 设置当前正在运行的任务
-            processor.current = Some(task);
-            // 手动释放处理器
-            drop(processor);
+        let task = {
+            let mut guard = PROCESSORS.lock();
+            fetch_task().map(|task| {
+                let id = hart_id();
+                let processor = &mut guard[id];
+                let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
+                let next_task_cx_ptr = {
+                    let mut task_inner = task.acquire_inner_lock();
+                    task_inner.task_status = TaskStatus::Running;
+                    &task_inner.task_cx as *const TaskContext
+                };
+                processor.current = Some(task);
+                (idle_task_cx_ptr, next_task_cx_ptr)
+            })
+        };
+        if let Some((idle_ptr, next_ptr)) = task {
             unsafe {
-                // 调用__switch 函数(汇编)切换任务
-                __switch(idle_task_cx_ptr, next_task_cx_ptr);
+                __switch(idle_ptr, next_ptr);
             }
         } else {
-            // 如果没有任务
-            // 释放处理器的锁
-            drop(processor);
-            // 没有就绪的任务，尝试唤醒一些任务
-            do_wake_expired();
+            if is_primary {
+                do_wake_expired();
+            } else {
+                do_wake_expired();
+                unsafe { core::arch::asm!("wfi") };
+            }
         }
     }
 }
 
-/// 取出当前正在运行的任务
+/// 取出当前 hart 正在运行的任务
 pub fn take_current_task() -> Option<Arc<TaskControlBlock>> {
-    PROCESSOR.lock().take_current()
+    let id = hart_id();
+    PROCESSORS.lock()[id].take_current()
 }
 
-/// 获取当前正在运行的任务
 pub fn current_task() -> Option<Arc<TaskControlBlock>> {
-    PROCESSOR.lock().current()
+    let id = hart_id();
+    PROCESSORS.lock()[id].current()
 }
 
-/// 获取当前正在运行的任务的用户态页表令牌
+/// 获取当前 hart 正在运行的任务的用户态页表令牌
 pub fn current_user_token() -> usize {
     current_task().unwrap().get_user_token()
 }
 
-/// 获取当前正在运行的任务的陷阱上下文
+/// 获取当前 hart 正在运行的任务的陷阱上下文
 pub fn current_trap_cx() -> &'static mut TrapContext {
     current_task().unwrap().acquire_inner_lock().get_trap_cx()
 }
 
-/// 切换到空闲任务上下文
+/// 切换到空闲任务上下文（当前 hart）
 pub fn schedule(switched_task_cx_ptr: *mut TaskContext) {
-    // 获取空闲任务的上下文指针
-    let idle_task_cx_ptr = PROCESSOR.lock().get_idle_task_cx_ptr();
+    let id = hart_id();
+    let mut guard = PROCESSORS.lock();
+    let idle_task_cx_ptr = guard[id].get_idle_task_cx_ptr();
+    // Guard must be dropped before __switch, but we took the pointer already
+    drop(guard);
     unsafe {
-        // 调用__switch 函数(汇编)切换任务
         __switch(switched_task_cx_ptr, idle_task_cx_ptr);
     }
 }

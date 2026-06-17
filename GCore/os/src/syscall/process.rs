@@ -16,7 +16,7 @@ use crate::task::{
     procs_count, signal::*, suspend_current_and_run_next, threads, wait_with_timeout,
     wake_interruptible, Rusage, TaskStatus,
 };
-use crate::timer::{get_time_ms, get_time_ns, get_time_sec, ITimerVal, NSEC_PER_SEC, TimeSpec, TimeVal, TimeZone, Times};
+use crate::timer::{get_time_ms, get_time_sec, ITimerVal, NSEC_PER_SEC, TimeSpec, TimeVal, TimeZone, Times};
 use alloc::boxed::Box;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
@@ -1151,18 +1151,80 @@ pub fn sys_clock_nanosleep(
     rqtp: *const TimeSpec,
     rmtp: *mut TimeSpec,
 ) -> isize {
-    if !rqtp.is_null() {
-        let token = current_user_token();
-        let timespec = match translated_ref(token, rqtp) {
-            Ok(timespec) => timespec,
-            Err(errno) => return errno,
-        };
-        info!(
-            "[sys_clock_nanosleep] clk_id: {}, flags: {:?}, rqtp: {:?}, rmtp: {:?}",
-            clk_id, flags, timespec, rmtp
-        );
+    if rqtp.is_null() {
+        return EINVAL;
     }
-    SUCCESS
+
+    const TIMER_ABSTIME: u32 = 0x01;
+
+    let task = current_task().unwrap();
+    let token = task.get_user_token();
+    let rq = match get_from_user(token, rqtp) {
+        Ok(ts) => ts,
+        Err(e) => return e,
+    };
+
+    // Validate rqtp
+    if rq.tv_nsec >= NSEC_PER_SEC {
+        return EINVAL;
+    }
+
+    let end = if (flags & TIMER_ABSTIME) != 0 {
+        // Absolute time — rq is an absolute wakeup time
+        match clk_id {
+            0 | 5 => {
+                // CLOCK_REALTIME / CLOCK_REALTIME_COARSE:
+                // rq is absolute Unix time; convert to boot-time wakeup
+                let unix_sec = crate::timer::current_time() as usize;
+                let unix_nsec = crate::timer::get_time_ns() % NSEC_PER_SEC;
+                let unix_now_ns = unix_sec * NSEC_PER_SEC + unix_nsec;
+                let req_ns = rq.tv_sec * NSEC_PER_SEC + rq.tv_nsec;
+                if req_ns <= unix_now_ns {
+                    return SUCCESS;
+                }
+                let remaining_ns = req_ns - unix_now_ns;
+                TimeSpec::now() + TimeSpec::from_ns(remaining_ns)
+            }
+            _ => {
+                // CLOCK_MONOTONIC / CLOCK_BOOTTIME / CLOCK_MONOTONIC_RAW /
+                // CLOCK_MONOTONIC_COARSE: rq is already boot-time-compatible
+                let now = TimeSpec::now();
+                if rq <= now {
+                    return SUCCESS;
+                }
+                rq
+            }
+        }
+    } else {
+        // Relative time — rq is a duration
+        if rq.tv_sec == 0 && rq.tv_nsec == 0 {
+            return SUCCESS;
+        }
+        TimeSpec::now() + rq
+    };
+
+    wait_with_timeout(Arc::downgrade(&task), end);
+    drop(task);
+
+    block_current_and_run_next();
+
+    let task = current_task().unwrap();
+    let inner = task.acquire_inner_lock();
+    if inner.sigpending.is_empty() {
+        // Normal timeout expiry
+        if !rmtp.is_null() {
+            copy_to_user(token, &TimeSpec::new(), rmtp).unwrap();
+        }
+        SUCCESS
+    } else {
+        // Interrupted by signal — write remaining time
+        if !rmtp.is_null() {
+            let now = TimeSpec::now();
+            let rem = if end > now { end - now } else { TimeSpec::new() };
+            copy_to_user(token, &rem, rmtp).unwrap();
+        }
+        EINTR
+    }
 }
     
 // int sigaction(int signum, const struct sigaction *act, struct sigaction *oldact);
@@ -1266,14 +1328,124 @@ pub fn sys_madvise(addr: usize, length: usize, advice: usize) -> isize {
     SUCCESS
 }
 
+/// IoVec layout for process_vm_readv/writev (x86_64/riscv64: 16 bytes each)
+#[repr(C)]
+struct IoVec {
+    iov_base: usize,
+    iov_len: usize,
+}
+
+/// Read iovecs from user space and return a flat Vec of (addr, len) pairs
+fn read_iovecs(token: usize, iov_ptr: usize, iovcnt: usize) -> Result<Vec<(usize, usize)>, isize> {
+    if iovcnt == 0 {
+        return Ok(Vec::new());
+    }
+    let iov_size = core::mem::size_of::<IoVec>() * iovcnt;
+    let iov_bytes = translated_byte_buffer(token, iov_ptr as *const u8, iov_size)?;
+    // Now we can reinterpret the bytes as IoVecs
+    let ptr = iov_bytes.as_ptr() as *const IoVec;
+    let iovecs = unsafe { core::slice::from_raw_parts(ptr, iovcnt) };
+    Ok(iovecs.iter().map(|iov| (iov.iov_base, iov.iov_len)).collect())
+}
+
+/// Compute total len from iovec list
+fn iovec_total_len(iovs: &[(usize, usize)]) -> usize {
+    iovs.iter().map(|(_, len)| len).sum()
+}
+
+/// Copy from src token's memory (src_iovs) to dst token's memory (dst_iovs).
+/// Returns number of bytes actually copied.
+fn process_vm_copy(
+    src_token: usize,
+    src_iovs: &[(usize, usize)],
+    dst_token: usize,
+    dst_iovs: &[(usize, usize)],
+) -> usize {
+    let src_total = iovec_total_len(src_iovs);
+    let dst_total = iovec_total_len(dst_iovs);
+    let copy_len = src_total.min(dst_total);
+    if copy_len == 0 {
+        return 0;
+    }
+
+    // Simpler approach: gather all src bytes into one contiguous kernel buffer, then scatter to dst
+    let mut temp = alloc::vec![0u8; copy_len];
+    let mut copied = 0usize;
+    for &(addr, len) in src_iovs {
+        if copied >= copy_len { break; }
+        let take = len.min(copy_len - copied);
+        match translated_byte_buffer(src_token, addr as *const u8, take) {
+            Ok(bufs) => {
+                let mut off = 0usize;
+                for b in &bufs {
+                    let btake = b.len().min(take - off);
+                    temp[copied..copied + btake].copy_from_slice(&b[..btake]);
+                    copied += btake;
+                    off += btake;
+                }
+            }
+            Err(_) => break,
+        }
+    }
+
+    // Scatter to destination
+    let mut written = 0usize;
+    for &(addr, len) in dst_iovs {
+        if written >= copy_len { break; }
+        let take = len.min(copy_len - written);
+        if let Ok(bufs) = translated_byte_buffer(dst_token, addr as *mut u8, take) {
+            let mut wbuf = UserBuffer::new(bufs);
+            wbuf.write(&temp[written..written + take]);
+            written += take;
+        } else {
+            break;
+        }
+    }
+    written
+}
+
 pub fn sys_process_vm_readv(pid: usize, lvec: usize, liovcnt: usize, rvec: usize, riovcnt: usize, flags: usize) -> isize {
-    trace!("[sys_process_vm_readv] pid={}, flags={}", pid, flags);
-    ENOSYS
+    trace!("[sys_process_vm_readv] pid={}, liovcnt={}, riovcnt={}, flags={}", pid, liovcnt, riovcnt, flags);
+    let curr = current_task().unwrap();
+    let curr_token = curr.get_user_token();
+    let local_iovs = match read_iovecs(curr_token, lvec, liovcnt) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let remote_iovs = match read_iovecs(curr_token, rvec, riovcnt) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let target = match find_task_by_pid(pid) {
+        Some(t) => t,
+        None => return ESRCH,
+    };
+    let target_token = target.get_user_token();
+    // Read from remote (target) → write to local (current)
+    let n = process_vm_copy(target_token, &remote_iovs, curr_token, &local_iovs);
+    n as isize
 }
 
 pub fn sys_process_vm_writev(pid: usize, lvec: usize, liovcnt: usize, rvec: usize, riovcnt: usize, flags: usize) -> isize {
-    trace!("[sys_process_vm_writev] pid={}, flags={}", pid, flags);
-    ENOSYS
+    trace!("[sys_process_vm_writev] pid={}, liovcnt={}, riovcnt={}, flags={}", pid, liovcnt, riovcnt, flags);
+    let curr = current_task().unwrap();
+    let curr_token = curr.get_user_token();
+    let local_iovs = match read_iovecs(curr_token, lvec, liovcnt) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let remote_iovs = match read_iovecs(curr_token, rvec, riovcnt) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let target = match find_task_by_pid(pid) {
+        Some(t) => t,
+        None => return ESRCH,
+    };
+    let target_token = target.get_user_token();
+    // Write from local (current) → to remote (target)
+    let n = process_vm_copy(curr_token, &local_iovs, target_token, &remote_iovs);
+    n as isize
 }
 
 pub fn sys_sched_setparam(pid: usize, param: *const u8) -> isize {

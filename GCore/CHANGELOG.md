@@ -7,6 +7,74 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Phase 7 — 网络栈补全、SMP 多核、Swap 启用、文档完善
+
+#### clock_nanosleep 完整实现
+
+- **重写** `os/src/syscall/process.rs` 中 `sys_clock_nanosleep`：从仅日志的空壳改为完整阻塞等待
+  - 参数验证：空指针检查、`tv_nsec >= 1e9` 合法性检查
+  - `TIMER_ABSTIME` 绝对时间：CLOCK_REALTIME 转 boot-time、CLOCK_MONOTONIC 直接比较
+  - 相对时间：`end = TimeSpec::now() + rqtp`，零时长立即返回
+  - 阻塞：`wait_with_timeout()` 注册超时 → `block_current_and_run_next()` 让出 CPU
+  - 唤醒后：信号中断时 `rmtp` 写剩余时间返回 `EINTR`；超时正常返回 `SUCCESS`
+
+#### 网络栈补全
+
+- **sendmsg/recvmsg**：注册 SYSCALL_SENDMSG(211)/SYSCALL_RECVMSG(212)，定义 riscv64 ABI MsgHdr(56B) + Iov(16B)
+  - `gather_iov()`：从用户空间 iovec 数组 gather 到内核连续缓冲区
+  - `scatter_iov()`：从内核缓冲区 scatter 到用户空间 iovec 数组
+  - `sys_sendmsg`：解析 msghdr → gather iov → msg_name 非空则 bind/connect → write socket
+  - `sys_recvmsg`：read socket → scatter iov → 填 msg_name(peer addr) 和 namelen → MSG_TRUNC flag
+- **ICMP Raw Socket**：启用 smoltcp `socket-raw`/`socket-icmp` features
+  - 新增 `os/src/net/icmp.rs`：IcmpSocket 包装 smoltcp ICMP socket，实现全套 Socket + File trait
+  - `socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)` 支持
+  - ICMP send/recv 通过 smoltcp icmp::Socket，默认目标 loopback
+- **SO_REUSEADDR**：setsockopt 无操作允许端口复用，getsockopt 固定返回 1
+- **SocketType**：新增 `SOCK_RAW` bit，`Socket::alloc()` 处理 raw socket 创建（值=3 避免 bitflags 冲突）
+- **Network syscall**：`sys_sendto`/`sys_recvfrom`/`sys_bind` 匹配分支新增 `SOCK_RAW`
+
+#### SMP 多核支持
+
+- **Per-hart Processor**：`PROCESSOR: Mutex<Processor>` → `PROCESSORS: Mutex<[Processor; MAX_HARTS]>`，按 `hart_id()` 索引
+- **hart_id()**：从 RISC-V `tp` 寄存器读取，封装于新建 `os/src/hal/arch/riscv/smp.rs`
+- **SBI IPI**：`os/src/hal/arch/riscv/sbi.rs` 新增 `send_ipi()` 和 `remote_sfence_vma()` SBI call
+- **Secondary hart bootstrap**：
+  - `os/src/hal/arch/riscv/entry.asm`：新增 `_secondary_start` 入口，per-hart 栈（`secondary_stacks`，每 hart 64KiB）
+  - `os/src/main.rs`：`smp_start_secondary_harts()` 通过 `ecall hsm_start` 启动 hart 1-7
+  - `rust_secondary()` 入口：初始化 trap/timer → `run_tasks()` 调度循环
+- **TLB shootdown**：`sv39.rs` 中 `tlb_invalidate()` 升级为全局 TLB shootdown（`remote_sfence_vma`）
+- **Timer**：`TIMER_INTERRUPT` → per-hart `TIMER_INTERRUPTS[8]` 数组，每个 hart 独立计数
+- **调度器**：`run_tasks()` per-hart 独立循环，secondary harts 无任务时 `do_wake_expired() + wfi`
+- **LoongArch 兼容**：`hart_id()` 始终返回 0，MAX_HARTS=8（非 riscv 下仅用槽 0）
+- **Linker**：`linker.ld` 保留 `.bss.secondary_stacks` 段
+
+#### Swap 与 OOM Handler 启用
+
+- **默认启用**：`Cargo.toml` 中 `default` features 添加 `"oom_handler"`（激活 swap + zram）
+- **Swap 健壮性**：
+  - `Swap::new()`：增加 `usable` 字段，检测 `FILE_SYSTEM.alloc_blocks()` 是否返回空 vec
+  - `Swap::write()`：返回 `Option<Arc<SwapTracker>>` 替代 `panic!`（空间耗尽量返回 None）
+  - `Swap::read()`：检查 `usable` 标志
+- **OOM 路径**：`do_oom()`/`force_swap()` 添加 `MemoryError::SwapIsFull` 分支，优雅跳过已满 swap 设备
+- **map_area.rs**：`swap_out()`/`force_swap_out()` 适配 `Option` 返回值，区分 `SharedPage`、`SwapIsFull`、`NotInMemory` 等错误
+
+#### 编译警告清理（137 → 0）
+
+- **crate 级 `#[allow]`**：`main.rs` 添加 `static_mut_refs`、`internal_features`、`dead_code`、`unused_*`、`unexpected_cfgs`
+- **已稳定 features 移除**：`asm_const`、`panic_info_message`（main.rs）；`raw_ref_op`（safe-mmio）；`const_fn_trait_bound`（dep_iso）
+- **cfg features 补全**：`Cargo.toml` 添加 `board_k210`、`board_fu740`、`board_cv1811h`
+- **依赖警告**：riscv lib 添加 `#![allow(unexpected_cfgs)]`；dep_iso lib 添加 `#![allow(invalid_value)]`
+- **ext4 模块**：添加 `#![allow(dead_code)]`
+- **TaskContext**：`zero_init()` → `const fn` 支持静态初始化
+
+#### 文档全面更新
+
+- **README.md**：重写特性列表（120+ syscall分类、SMP、ICMP、Swap）、Build Features 表格、项目结构细化
+- **Doc/Nanosleep.md**：重写为完整 `clock_nanosleep` 实现文档（TIMER_ABSTIME、信号中断、剩余时间）
+- **Doc/SMP.md**（新建）：多核启动流程、per-hart 架构、IPI + TLB shootdown、调度器设计
+- **Doc/Swap.md**（新建）：Swap slot 管理、Zram lz4_flex 压缩、OOM 触发链路、Page fault 交换路径
+- **Doc/Network.md**（新建）：Socket trait 设计、TCP/UDP/ICMP/Unix 实现、sendmsg/recvmsg scatter-gather
+
 ### Phase 1 — 核心功能补全
 
 #### 随机数子系统

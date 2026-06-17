@@ -83,8 +83,8 @@ impl File for Teletype {
         true
     }
 
-    fn read(&self, offset: Option<&mut usize>, buf: &mut [u8]) -> usize {
-        unimplemented!()
+    fn read(&self, _offset: Option<&mut usize>, _buf: &mut [u8]) -> usize {
+        0
     }
 
     fn write(&self, offset: Option<&mut usize>, buffer: &[u8]) -> usize {

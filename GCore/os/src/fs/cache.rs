@@ -1,4 +1,3 @@
-use crate::config::MEMORY_HIGH_BASE;
 use crate::config::{PAGE_SIZE, PAGE_SIZE_BITS};
 use crate::hal::{BLOCK_SZ, BUFFER_CACHE_NUM};
 use crate::mm::{frame_alloc, FrameTracker, KERNEL_SPACE};

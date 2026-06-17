@@ -7,7 +7,7 @@ use crate::{
         ext4::{
             block_group::Block,
             direntry::{DirEntryType, Ext4DirEntryTail},
-            InodeFileType, PageCache,
+            InodeFileType, PageCache, ROOT_INODE,
         },
         file_trait::File,
         inode::{InodeLock, InodeTrait},
@@ -95,11 +95,8 @@ impl Ext4OSInode {
 impl Ext4OSInode {
     pub fn first_root_inode(ext4fs: &Arc<dyn VFS>) -> Arc<dyn File> {
         let ext4fs_concrete = Arc::downcast::<Ext4FileSystem>(ext4fs.clone()).unwrap();
-        // 先获取ROOT_INODE
-
-        let root_inode = todo!();
-        let ext4_root_inode = Ext4OSInode::new(root_inode, ext4fs_concrete);
-        todo!()
+        let root_inode_ref = ext4fs_concrete.get_inode_ref(ROOT_INODE);
+        Ext4OSInode::new(root_inode_ref, ext4fs_concrete)
     }
 }
 
@@ -507,7 +504,7 @@ impl File for Ext4OSInode {
         let inode_mode = match file_type {
             DiskInodeType::File => InodeFileType::S_IFREG.bits(),
             DiskInodeType::Directory => InodeFileType::S_IFDIR.bits(),
-            _ => todo!(),
+            _ => return Err(crate::syscall::errno::EINVAL),
         };
 
         let inode_ref = self.inode.lock();
@@ -716,7 +713,7 @@ impl File for Ext4OSInode {
     fn modify_size(&self, diff: isize) -> Result<(), isize> {
         println!("Should not into here!");
         // let inode_lock = self.inode_lock.write();
-        let inode_ref = self.inode.lock();
+        let mut inode_ref = self.inode.lock();
         debug_assert!(diff.saturating_add(inode_ref.inode.size() as isize) >= 0);
 
         let old_size = inode_ref.inode.size() as u32;
@@ -725,7 +722,11 @@ impl File for Ext4OSInode {
         // drop(inode_lock);
 
         if diff > 0 {
-            todo!()
+            // Extend file: update cache manager with new size
+            self.file_cache_manager.notify_new_size(new_size as usize);
+            // Update inode size (block allocation handled lazily by extent tree)
+            inode_ref.inode.set_size(new_size as u64);
+            self.ext4fs.write_back_inode(&mut inode_ref);
         } else {
             self.file_cache_manager.notify_new_size(new_size as usize);
         }
@@ -819,19 +820,16 @@ impl File for Ext4OSInode {
         Ok(cache_list)
     }
 
-    /// 这个先不考虑实现
     fn oom(&self) -> usize {
-        todo!()
+        0
     }
 
-    /// 这个也一样
     fn hang_up(&self) -> bool {
-        todo!()
+        false
     }
 
-    /// 这个也一样
-    fn fcntl(&self, cmd: u32, arg: u32) -> isize {
-        todo!()
+    fn fcntl(&self, _cmd: u32, _arg: u32) -> isize {
+        crate::syscall::errno::EINVAL
     }
 }
 

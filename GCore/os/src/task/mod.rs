@@ -30,16 +30,9 @@ pub use processor::{
 pub use signal::*;
 pub use task::{RobustList, Rusage, TaskControlBlock, TaskStatus};
 
-use self::processor::PROCESSOR;
 #[allow(unused)]
 pub fn try_yield() {
-    let lock = PROCESSOR.lock();
-    let mut do_suspend = false;
-    if !lock.is_vacant() {
-        do_suspend = true;
-    }
-    drop(lock);
-    if do_suspend {
+    if current_task().is_some() {
         suspend_current_and_run_next()
     }
 }

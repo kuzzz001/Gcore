@@ -22,9 +22,9 @@ pub const MMIO: &[(usize, usize)] = &[
 pub type BlockDeviceImpl = crate::drivers::block::SDCardWrapper;
 
 pub fn device_init() {
-    unimplemented!();
+    // K210 platform not supported in current configuration
 }
 
 pub fn irq_handler() {
-    unimplemented!();
+    // K210 platform not supported in current configuration
 }

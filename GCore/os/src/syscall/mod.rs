@@ -9,7 +9,7 @@ mod syscall_id;
 
 use core::convert::TryFrom;
 use fs::*;
-use log::{error, info};
+use log::info;
 use net::*;
 pub use process::CloneFlags;
 use process::*;
@@ -130,6 +130,8 @@ pub fn syscall_name(id: usize) -> &'static str {
         SYSCALL_GETPEERNAME => "getpeername",
         SYSCALL_SENDTO => "sendto",
         SYSCALL_RECVFROM => "recvfrom",
+        SYSCALL_SENDMSG => "sendmsg",
+        SYSCALL_RECVMSG => "recvmsg",
         SYSCALL_SETSOCKOPT => "setsockopt",
         SYSCALL_GETSOCKOPT => "getsockopt",
         SYSCALL_SBRK => "sbrk",
@@ -222,7 +224,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         ),
         SYSCALL_FACCESSAT => sys_faccessat2(args[0], args[1] as *const u8, args[2] as u32, 0u32),
         SYSCALL_CHDIR => sys_chdir(args[0] as *const u8),
-        SYSCALL_FCHMODAT => sys_fchmodat(),
+        SYSCALL_FCHMODAT => sys_fchmodat(args[0], args[1] as *const u8, args[2] as u32, args[3] as u32),
         SYSCALL_OPEN => sys_openat(AT_FDCWD, args[0] as *const u8, args[1] as u32, 0o777u32),
         SYSCALL_OPENAT => sys_openat(
             args[0],
@@ -466,6 +468,8 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
             args[4] as usize,
         ),
         SYSCALL_SOCK_SHUTDOWN => sys_sock_shutdown(args[0] as u32, args[1] as u32),
+        SYSCALL_SENDMSG => sys_sendmsg(args[0] as u32, args[1] as *const u8, args[2] as u32),
+        SYSCALL_RECVMSG => sys_recvmsg(args[0] as u32, args[1] as *mut u8, args[2] as u32),
         SYSCALL_GETRANDOM => sys_getrandom(args[0] as usize, args[1] as usize, args[2] as u32),
         SYSCALL_SHUTDOWN => sys_shutdown(),
         _ => {
