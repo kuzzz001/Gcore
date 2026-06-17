@@ -8,7 +8,6 @@ use super::{
     layout::OpenFlags,
     Hwclock,
 };
-use crate::fs::dev::Hwclock;
 use crate::fs::fat32::FatOSInode;
 #[cfg(feature = "oom_handler")]
 use crate::mm::tlb_invalidate;

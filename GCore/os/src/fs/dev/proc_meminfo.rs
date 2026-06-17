@@ -1,6 +1,6 @@
 use crate::{
     fs::{directory_tree::DirectoryTreeNode, file_trait::File, layout::Stat, StatMode,
-         DiskInodeType, DiskInode},
+         DiskInodeType},
     mm::UserBuffer,
     syscall::errno::*,
 };
