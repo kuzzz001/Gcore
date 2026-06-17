@@ -55,12 +55,12 @@ else
 endif
 
 # Build rules
-all: fs-img build
+all: build
 
 mv:
 	cp -f $(KERNEL_ELF) $(KERNEL_LA)
 
-build: env $(KERNEL_BIN) mv
+build: env $(KERNEL_ELF) mv
 
 env:
 	(rustup target list | grep "$(TARGET) (installed)") || rustup target add $(TARGET)
@@ -74,6 +74,8 @@ user:
 
 $(KERNEL_BIN): kernel
 	@$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $@
+
+$(KERNEL_ELF): kernel
 
 fs-img: user
 	./buildfs.sh "$(ROOTFS_IMG)" "$(BOARD)" $(MODE) $(FS_MODE)

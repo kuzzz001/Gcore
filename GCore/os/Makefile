@@ -15,6 +15,7 @@ all: rv64_all la64_all
 
 rv64_all:
 	@echo "Building rv64"
+	@ln -sf dotcargo .cargo
 	@rustup override set nightly-2025-01-18-x86_64-unknown-linux-gnu
 	cp ./src/lang_items.rs.rv ./src/lang_items.rs
 	cp ../user/src/lang_items.rs.rv ../user/src/lang_items.rs
@@ -22,10 +23,11 @@ rv64_all:
 
 la64_all:
 	@echo "Building la64"
+	@ln -sf dotcargo .cargo
 	@rustup override set nightly-2024-05-01-x86_64-unknown-linux-gnu
 	cp ./src/lang_items.rs.la ./src/lang_items.rs
 	cp ../user/src/lang_items.rs.la ../user/src/lang_items.rs
-	make ARCH=la64 -f make/la64o.mk all MODE=${MODE}
+	make ARCH=la64 -f make/la64.mk all MODE=${MODE}
 
 rv64-kernel-build-only:
 	@rustup override set nightly-2025-01-18-x86_64-unknown-linux-gnu

@@ -2,6 +2,7 @@
 
 os/target/
 os/qemu.log
+os/.cargo
 
 user/target/
 
