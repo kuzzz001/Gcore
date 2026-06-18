@@ -91,9 +91,9 @@ kernel:
 	@echo Platform: $(BOARD)
 	@cp -f src/hal/arch/riscv/linker-$(BOARD).ld src/hal/arch/riscv/linker.ld
     ifeq ($(MODE), debug)
-		@LOG=${LOG} cargo build --features "board_$(BOARD) $(LOG_OPTION) block_$(BLK_MODE) oom_handler" --no-default-features
+		@LOG=${LOG} cargo build --target $(TARGET) --features "board_$(BOARD) $(LOG_OPTION) block_$(BLK_MODE) oom_handler" --no-default-features
     else
-		@LOG=${LOG} cargo build --release --features "board_$(BOARD) $(LOG_OPTION) block_$(BLK_MODE) oom_handler" --no-default-features
+		@LOG=${LOG} cargo build --target $(TARGET) --release --features "board_$(BOARD) $(LOG_OPTION) block_$(BLK_MODE) oom_handler" --no-default-features
     endif
 
 clean:

@@ -4,14 +4,16 @@ use core::arch::asm;
 /// Maximum number of harts (hardware threads)
 pub const MAX_HARTS: usize = 8;
 
-/// Get current hart ID from tp register
+/// Get current hart ID from tp register (set by entry.asm from OpenSBI a0)
+/// If tp is not properly initialized by firmware, fall back to 0 (boot hart).
 #[inline(always)]
 pub fn hart_id() -> usize {
     let id: usize;
     unsafe {
         asm!("mv {}, tp", out(reg) id);
     }
-    id
+    // Sanity check: hart ID should be < MAX_HARTS
+    if id < MAX_HARTS { id } else { 0 }
 }
 
 /// Send IPI to target hart(s)

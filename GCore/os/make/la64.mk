@@ -1,5 +1,5 @@
 # Target configuration
-TARGET := loongarch64-unknown-none
+TARGET := loongarch64-unknown-linux-gnu
 MODE := release
 KERNEL_ELF := target/$(TARGET)/$(MODE)/os
 KERNEL_BIN := $(KERNEL_ELF).bin
@@ -83,9 +83,9 @@ fs-img: user
 kernel:
 	@echo Platform: $(BOARD)
 ifeq ($(MODE), debug)
-	@LOG=$(LOG) cargo build --features "board_$(BOARD) $(LOG_OPTION) block_$(BLK_MODE) oom_handler" --no-default-features --target loongarch64-unknown-none
+	@LOG=$(LOG) cargo build --features "board_$(BOARD) $(LOG_OPTION) block_$(BLK_MODE) oom_handler" --no-default-features --target $(TARGET)
 else
-	@LOG=$(LOG) cargo build --release --features "board_$(BOARD) $(LOG_OPTION) block_$(BLK_MODE) oom_handler" --no-default-features --target loongarch64-unknown-none
+	@LOG=$(LOG) cargo build --release --features "board_$(BOARD) $(LOG_OPTION) block_$(BLK_MODE) oom_handler" --no-default-features --target $(TARGET)
 endif
 
 clean:

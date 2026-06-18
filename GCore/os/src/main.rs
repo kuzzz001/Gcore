@@ -17,6 +17,8 @@
 #![feature(lang_items)]
 #![feature(trait_upcasting)]
 #![feature(core_intrinsics)]
+#![feature(panic_info_message)]
+#![feature(asm_const)]
 #![allow(unexpected_cfgs)]
 pub use hal::config;
 extern crate alloc;
@@ -120,8 +122,9 @@ pub fn rust_main() -> ! {
     fs::flush_preload();
     task::add_initproc();
 
-    // Start secondary harts
-    smp_start_secondary_harts();
+    // Skip secondary harts for debugging
+    // smp_start_secondary_harts();
+    crate::println!("[MAIN] entering run_tasks");
 
     // note that in run_tasks(), there is yet *another* pre_start_init(),
     // which is used to turn on interrupts in some archs like LoongArch.
@@ -130,6 +133,7 @@ pub fn rust_main() -> ! {
 }
 
 /// Boot secondary harts via OpenSBI HSM
+#[cfg(feature = "riscv")]
 fn smp_start_secondary_harts() {
     use core::arch::asm;
     extern "C" {
@@ -155,7 +159,11 @@ fn smp_start_secondary_harts() {
     }
 }
 
+#[cfg(not(feature = "riscv"))]
+fn smp_start_secondary_harts() {}
+
 /// Secondary hart entry point
+#[cfg(feature = "riscv")]
 #[no_mangle]
 pub extern "C" fn rust_secondary() -> ! {
     use crate::hal::arch::riscv::smp;

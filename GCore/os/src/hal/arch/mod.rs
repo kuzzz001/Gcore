@@ -8,6 +8,7 @@ pub use loongarch64::{
     config::BUFFER_CACHE_NUM,
     config::KERNEL_HEAP_SIZE,
     config::MEMORY_END,
+    config::MEMORY_HIGH_BASE,
     console_flush, console_getchar, console_putchar, machine_init, shutdown,
     time::{get_clock_freq, get_time, TICKS_PER_SEC},
     KernelPageTableImpl, PageTableImpl, __switch, kstack_alloc, tlb_invalidate,
@@ -22,7 +23,7 @@ pub mod riscv;
 #[cfg(feature = "riscv")]
 pub use riscv::{
     bootstrap_init, config,
-    config::{BLOCK_SZ, BUFFER_CACHE_NUM, KERNEL_HEAP_SIZE, MEMORY_END},
+    config::{BLOCK_SZ, BUFFER_CACHE_NUM, KERNEL_HEAP_SIZE, MEMORY_END, MEMORY_HIGH_BASE},
     kern_stack::kstack_alloc,
     kern_stack::trap_cx_bottom_from_tid,
     kern_stack::ustack_bottom_from_tid,

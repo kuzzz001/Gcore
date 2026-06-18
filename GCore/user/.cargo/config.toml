@@ -5,8 +5,9 @@ rustflags = [
     "-Clink-arg=-nostdlib",
     "-Clink-arg=-static",
     "-Cforce-frame-pointers=yes",
+    "-Clink-arg=--gc-sections",
 ]
-linker = "loongarch64-linux-gnu-gcc"
+linker = "rust-lld"
 
 [target.riscv64gc-unknown-none-elf]
 rustflags = ["-Clink-args=-Tsrc/linker-rv.ld"]

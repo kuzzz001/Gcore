@@ -2,7 +2,7 @@
 
 use embedded_hal::serial::nb::{Read, Write};
 
-use crate::drivers::Ns16550a;
+use crate::drivers::serial::ns16550a::Ns16550a;
 use core::{arch::asm, mem::MaybeUninit};
 
 use super::acpi::Pm1Cnt;

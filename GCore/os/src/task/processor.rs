@@ -52,6 +52,13 @@ lazy_static! {
 
 /// 每个 hart 的核心调度循环
 pub fn run_tasks() {
+    // Enable timer interrupt now that we have tasks ready
+    #[cfg(feature = "riscv")]
+    {
+        crate::hal::arch::riscv::trap::enable_timer_interrupt();
+        crate::hal::arch::riscv::time::set_next_trigger();
+    }
+
     let is_primary = hart_id() == 0;
     loop {
         let task = {

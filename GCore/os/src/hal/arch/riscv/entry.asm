@@ -2,6 +2,8 @@
     .globl _start
 _start:
     # Boot hart (hart 0) only: set up stack and call rust_main
+    # a0 contains hart ID from OpenSBI — store it in tp for later use
+    mv tp, a0
     la sp, boot_stack_top
     call rust_main
 
