@@ -60,7 +60,7 @@ all: build
 mv:
 	cp -f $(KERNEL_ELF) $(KERNEL_LA)
 
-build: env $(KERNEL_ELF) mv
+build: env user $(KERNEL_ELF) mv
 
 env:
 	(rustup target list | grep "$(TARGET) (installed)") || rustup target add $(TARGET)
