@@ -1,0 +1,29 @@
+[build]
+
+[target.loongarch64-unknown-none]
+rustflags = [
+    "-Clink-arg=-Tsrc/hal/arch/loongarch64/linker.ld",
+    "-Cforce-frame-pointers=yes",
+]
+
+[target.loongarch64-unknown-linux-gnu]
+rustflags = [
+    "-Clink-arg=-Tsrc/hal/arch/loongarch64/linker.ld",
+    "-Clink-arg=-nostdlib",
+    "-Clink-arg=-static",
+    "-Cforce-frame-pointers=yes",
+    "-Clink-arg=--gc-sections",
+]
+linker = "rust-lld"
+
+[target.riscv64gc-unknown-none-elf]
+rustflags = [
+    "-Clink-arg=-Tsrc/hal/arch/riscv/linker.ld",
+    "-Cforce-frame-pointers=yes",
+]
+
+[source.crates-io]
+replace-with = "vendored-sources"
+
+[source.vendored-sources]
+directory = "vendor"
