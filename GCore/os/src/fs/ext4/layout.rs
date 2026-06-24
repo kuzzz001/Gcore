@@ -747,20 +747,27 @@ impl File for Ext4OSInode {
 
     fn set_timestamp(&self, ctime: Option<usize>, atime: Option<usize>, mtime: Option<usize>) {
         let mut inode_ref = self.inode.lock();
+        let mut dirty = false;
         if let Some(ct) = ctime {
             inode_ref.set_ctime((ct & 0xFFFFFFFF) as u32);
             let epoch = ((ct >> 32) & 0x3) as u32;
             inode_ref.inode.i_ctime_extra = (inode_ref.inode.i_ctime_extra & !0x3) | epoch;
+            dirty = true;
         }
         if let Some(at) = atime {
             inode_ref.set_atime((at & 0xFFFFFFFF) as u32);
             let epoch = ((at >> 32) & 0x3) as u32;
             inode_ref.inode.i_atime_extra = (inode_ref.inode.i_atime_extra & !0x3) | epoch;
+            dirty = true;
         }
         if let Some(mt) = mtime {
             inode_ref.set_mtime((mt & 0xFFFFFFFF) as u32);
             let epoch = ((mt >> 32) & 0x3) as u32;
             inode_ref.inode.i_mtime_extra = (inode_ref.inode.i_mtime_extra & !0x3) | epoch;
+            dirty = true;
+        }
+        if dirty {
+            self.ext4fs.write_back_inode(&mut inode_ref);
         }
     }
 
