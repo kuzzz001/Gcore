@@ -1093,7 +1093,10 @@ pub fn sys_mprotect(addr: usize, len: usize, prot: usize) -> isize {
     let result = task.vm.lock().mprotect(addr, len, prot);
     match result {
         Ok(_) => SUCCESS,
-        Err(errno) => errno,
+        Err(errno) => {
+            crate::println!("[mprotect] FAIL addr={:#x} len={:#x} prot={:#x} err={}", addr, len, prot, errno);
+            errno
+        }
     }
 }
 

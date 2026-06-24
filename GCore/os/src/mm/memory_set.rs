@@ -1,6 +1,6 @@
 use super::map_area::*;
 use super::page_table::PageTable;
-use super::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
+use super::{PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
 use crate::config::*;
 use crate::fs::SeekWhence;
 use crate::hal::TrapContext;
@@ -964,11 +964,21 @@ impl<T: PageTable> MemorySet<T> {
             self.areas.remove(idx);
         }
         if let Some(idx) = break_apart_idx {
-            let (mut second, third) = self.areas[idx].into_three(start_vpn, end_vpn).unwrap();
-            if let Err(_) = second.unmap(page_table) {
-                warn!("[munmap] Some pages are already unmapped, is it caused by lazy alloc?");
+            // Try to split; for identity-mapped areas that can't be split,
+            // just unmap the internal VPNs directly without splitting.
+            if let Ok((mut second, third)) = self.areas[idx].into_three(start_vpn, end_vpn) {
+                if let Err(_) = second.unmap(page_table) {
+                    warn!("[munmap] Some pages are already unmapped, is it caused by lazy alloc?");
+                }
+                self.areas.insert(idx + 1, third);
+            } else {
+                // Fallback: unmap VPNs one by one for unsplittable areas
+                let mut vpn = start_vpn;
+                while vpn < end_vpn {
+                    let _ = page_table.unmap(vpn);
+                    vpn.step();
+                }
             }
-            self.areas.insert(idx + 1, third);
         }
         if found_area {
             Ok(())
@@ -984,89 +994,111 @@ impl<T: PageTable> MemorySet<T> {
             warn!("[mprotect] Not aligned");
             return Err(EINVAL);
         }
+        if len == 0 {
+            return Ok(());
+        }
         // here (prot << 1) is identical to BitFlags of X/W/R in pte flags
         let prot = MapPermission::from_bits(((prot as u8) << 1) | (1 << 4)).unwrap();
-        warn!(
+        trace!(
             "[mprotect] addr: {:X}, len: {:X}, prot: {:?}",
             addr, len, prot
         );
         let start_vpn = start_va.floor();
         let end_vpn = end_va.ceil();
-        let result = self.areas.iter().enumerate().find(|(_, area)| {
-            area.get_start::<T>() <= start_vpn && start_vpn < area.get_end::<T>()
-        });
-        match result {
-            Some((idx, _)) => {
-                let area_start_vpn = self.areas[idx].get_start::<T>();
-                let area_end_vpn = self.areas[idx].get_end::<T>();
-                // Addresses in the range [addr, addr+len-1] are invalid for the address space of the process,
-                // or specify one or more pages that are not mapped.
-                if end_vpn > area_end_vpn {
-                    warn!("[mprotect] addr: {:X} is not in any MapArea", addr);
+
+        // Iterate over VPNs, applying new permissions to each page.
+        // Read real PTE flags from hardware to correctly preserve X bit
+        // for identity-mapped / file-backed areas whose map_perm metadata
+        // may not reflect actual PTE state.
+        let mut cur_vpn = start_vpn;
+        let page_table = &mut self.page_table;
+
+        while cur_vpn < end_vpn {
+            let result = self.areas.iter().enumerate().find(|(_, area)| {
+                area.get_start::<T>() <= cur_vpn && cur_vpn < area.get_end::<T>()
+            });
+            let (area_idx, _) = match result {
+                Some(r) => r,
+                None => {
+                    warn!("[mprotect] vpn {:?} not in any MapArea", cur_vpn);
                     return Err(ENOMEM);
                 }
-                let area: &mut MapArea = if start_vpn == area_start_vpn && end_vpn == area_end_vpn {
-                    trace!("[mprotect] change prot of whole area, idx: {}", idx);
-                    &mut self.areas[idx]
-                } else if start_vpn == area_start_vpn {
-                    trace!("[mprotect] change prot of lower part");
-                    let second = match self.areas[idx].into_two(end_vpn) {
-                        Ok(s) => s,
-                        Err(_) => {
-                            warn!("[mprotect] into_two(lower) failed");
-                            return Err(ENOMEM);
-                        }
-                    };
-                    self.areas.insert(idx + 1, second);
-                    // important, keep the order of areas
-                    &mut self.areas[idx]
-                } else if end_vpn == area_end_vpn {
-                    trace!("[mprotect] change prot of higher part");
-                    let second = match self.areas[idx].into_two(start_vpn) {
-                        Ok(s) => s,
-                        Err(_) => {
-                            warn!("[mprotect] into_two(higher) failed");
-                            return Err(ENOMEM);
-                        }
-                    };
-                    self.areas.insert(idx + 1, second);
-                    &mut self.areas[idx + 1]
-                } else {
-                    trace!("[mprotect] change prot of internal part, call into_three");
-                    let (second, third) = match self.areas[idx].into_three(start_vpn, end_vpn) {
-                        Ok(v) => v,
-                        Err(_) => {
-                            warn!("[mprotect] into_three failed start={:#x} end={:#x}", start_vpn.0, end_vpn.0);
-                            return Err(ENOMEM);
-                        }
-                    };
-                    self.areas.insert(idx + 1, second);
-                    self.areas.insert(idx + 2, third);
-                    &mut self.areas[idx + 1]
-                };
-                let page_table = &mut self.page_table;
-                let mut has_unmapped_page = false;
+            };
+
+            let area_start = self.areas[area_idx].get_start::<T>();
+            let area_end = self.areas[area_idx].get_end::<T>();
+            let seg_start = cur_vpn;
+            let seg_end = core::cmp::min(end_vpn, area_end);
+
+            // Determine the PTE flags to apply to pages in this segment.
+            // Read real hardware PTE flags first; fall back to area.map_perm
+            // for identity-mapped pages (which have no Sv39 PTE entries).
+            let real_perm = page_table.get_pte_flags(seg_start)
+                .unwrap_or(self.areas[area_idx].map_perm);
+            let real_x = real_perm & MapPermission::X;
+            // Apply user's requested prot, strip W (CoW will add it back),
+            // and preserve the real Execute bit from hardware PTEs.
+            let pte_flags = prot.difference(MapPermission::W) | real_x;
+            let area_perm = prot | real_x;
+
+            // Try to split and update the MapArea. On failure, update PTEs directly.
+            let split_ok = if seg_start == area_start && seg_end == area_end {
+                let area = &mut self.areas[area_idx];
                 for vpn in area.inner.vpn_range {
-                    // Clear W prot, or CoW pages may be written unexpectedly.
-                    // And those pages will gain W prot by CoW.
-                    if let Err(_) = page_table.set_pte_flags(vpn, prot - MapPermission::W) {
-                        has_unmapped_page = true;
+                    let _ = page_table.set_pte_flags(vpn, pte_flags);
+                }
+                area.map_perm = area_perm;
+                true
+            } else if seg_start == area_start {
+                if let Ok(second) = self.areas[area_idx].into_two(seg_end) {
+                    self.areas.insert(area_idx + 1, second);
+                    let area = &mut self.areas[area_idx];
+                    for vpn in area.inner.vpn_range {
+                        let _ = page_table.set_pte_flags(vpn, pte_flags);
                     }
+                    area.map_perm = area_perm;
+                    true
+                } else {
+                    false
                 }
-                if has_unmapped_page {
-                    warn!("[mprotect] Some pages are not mapped, is it caused by lazy alloc?");
+            } else if seg_end == area_end {
+                if let Ok(second) = self.areas[area_idx].into_two(seg_start) {
+                    self.areas.insert(area_idx + 1, second);
+                    let area = &mut self.areas[area_idx + 1];
+                    for vpn in area.inner.vpn_range {
+                        let _ = page_table.set_pte_flags(vpn, pte_flags);
+                    }
+                    area.map_perm = area_perm;
+                    true
+                } else {
+                    false
                 }
-                // If `prot` contains W, store page fault & CoW will occur.
-                area.map_perm = prot;
+            } else {
+                if let Ok((second, third)) = self.areas[area_idx].into_three(seg_start, seg_end) {
+                    self.areas.insert(area_idx + 1, second);
+                    self.areas.insert(area_idx + 2, third);
+                    let area = &mut self.areas[area_idx + 1];
+                    for vpn in area.inner.vpn_range {
+                        let _ = page_table.set_pte_flags(vpn, pte_flags);
+                    }
+                    area.map_perm = area_perm;
+                    true
+                } else {
+                    false
+                }
+            };
+
+            if !split_ok {
+                let mut vpn = seg_start;
+                while vpn < seg_end {
+                    let _ = page_table.set_pte_flags(vpn, pte_flags);
+                    vpn.step();
+                }
             }
-            None => {
-                warn!("[mprotect] addr is not a valid pointer");
-                return Err(EINVAL);
-            }
+            cur_vpn = seg_end;
         }
         Ok(())
-    }
-    pub fn create_elf_tables(
+    }    pub fn create_elf_tables(
         &self,
         mut user_sp: usize,
         argv_vec: &Vec<String>,

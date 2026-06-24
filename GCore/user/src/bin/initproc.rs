@@ -287,10 +287,16 @@ fn run_group_in_dir(environ: &[*const u8], dir: &str, script: &str) {
 /// `========== START ... ==========` / `Pass!` / `END` 标记，评测可识别。
 fn run_one_libctest(environ: &[*const u8], dir: &str, exe: &str, case: &str) {
     let pid = fork();
+    if pid < 0 {
+        println!("[initproc] fork failed for {}/{} err={}", exe, case, pid);
+        return;
+    }
     if pid == 0 {
         if chdir(dir) < 0 {
+            println!("[initproc] chdir failed for {}/{}", exe, case);
             exit(126);
         }
+        println!("[initproc] child: run {}/{}", exe, case);
         let mut cmd = String::from("./runtest.exe -w ");
         cmd.push_str(exe);
         cmd.push(' ');
@@ -305,10 +311,14 @@ fn run_one_libctest(environ: &[*const u8], dir: &str, exe: &str, case: &str) {
             core::ptr::null(),
         ];
         exec(shell, &argv, environ);
+        println!("[initproc] exec failed for {}/{}", exe, case);
         exit(127);
-    } else if pid > 0 {
+    } else {
         let mut exit_code: i32 = 0;
         waitpid(pid as usize, &mut exit_code);
+        if exit_code != 0 {
+            println!("[initproc] {}/{} exit_code={}", exe, case, exit_code);
+        }
     }
 }
 

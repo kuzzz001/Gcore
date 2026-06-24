@@ -363,9 +363,10 @@ impl PageTable for LAFlexPageTable {
     /// Panics if the `vpn` is NOT mapped (invalid).
     fn unmap(&mut self, vpn: VirtPageNum) {
         //tlb_invalidate();
-        let pte = self.find_pte_refmut(vpn).unwrap(); // was `self.find_creat_pte(vpn).unwrap()`;
-        debug_assert!(pte.is_valid(), "vpn {:?} is invalid before unmapping", vpn);
-        *pte = LAFlexPageTableEntry { bits: 0 };
+        // find_pte_refmut returns None for identity-mapped areas without PTEs.
+        if let Some(pte) = self.find_pte_refmut(vpn) {
+            *pte = LAFlexPageTableEntry { bits: 0 };
+        }
     }
     /// Translate the `vpn` into its corresponding `Some(PageTableEntry)` if exists
     /// `None` is returned if nothing is found.
@@ -439,6 +440,19 @@ impl PageTable for LAFlexPageTable {
         } else {
             Err(())
         }
+    }
+    fn get_pte_flags(&self, vpn: VirtPageNum) -> Option<MapPermission> {
+        self.find_pte(vpn).map(|pte| {
+            let f = pte.flags();
+            let mut perm = MapPermission::empty();
+            if !f.contains(LAPTEFlagBits::NR) { perm |= MapPermission::R; }
+            if f.contains(LAPTEFlagBits::W)  { perm |= MapPermission::W; }
+            if !f.contains(LAPTEFlagBits::NX) { perm |= MapPermission::X; }
+            if f.contains(LAPTEFlagBits::PLV3) && !f.contains(LAPTEFlagBits::RPLV) {
+                perm |= MapPermission::U;
+            }
+            perm
+        })
     }
     fn clear_access_bit(&mut self, vpn: VirtPageNum) -> Result<(), ()> {
         tlb_invalidate();

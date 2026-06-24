@@ -236,9 +236,11 @@ impl PageTable for Sv39PageTable {
     /// Panics if the `vpn` is NOT mapped (invalid).
     fn unmap(&mut self, vpn: VirtPageNum) {
         //tlb_invalidate();
-        let pte = self.find_pte_refmut(vpn).unwrap(); // was `self.find_creat_pte(vpn).unwrap()`;
-        assert!(pte.is_valid(), "vpn {:?} is invalid before unmapping", vpn);
-        *pte = Sv39PageTableEntry::empty();
+        // find_pte_refmut returns None for identity-mapped areas without PTEs.
+        // Simply skip if PTE doesn't exist — nothing to unmap.
+        if let Some(pte) = self.find_pte_refmut(vpn) {
+            *pte = Sv39PageTableEntry::empty();
+        }
     }
     /// Translate the `vpn` into its corresponding `Some(PageTableEntry)` if exists
     /// `None` is returned if nothing is found.
@@ -302,13 +304,24 @@ impl PageTable for Sv39PageTable {
         }
     }
     fn set_pte_flags(&mut self, vpn: VirtPageNum, flags: MapPermission) -> Result<(), ()> {
-        //tlb_invalidate();
+        tlb_invalidate();
         if let Some(pte) = self.find_pte_refmut(vpn) {
             pte.set_permission(flags);
             Ok(())
         } else {
             Err(())
         }
+    }
+    fn get_pte_flags(&self, vpn: VirtPageNum) -> Option<MapPermission> {
+        self.find_pte(vpn).map(|pte| {
+            let f = pte.flags();
+            let mut perm = MapPermission::empty();
+            if f.contains(PTEFlags::R) { perm |= MapPermission::R; }
+            if f.contains(PTEFlags::W) { perm |= MapPermission::W; }
+            if f.contains(PTEFlags::X) { perm |= MapPermission::X; }
+            if f.contains(PTEFlags::U) { perm |= MapPermission::U; }
+            perm
+        })
     }
     fn clear_access_bit(&mut self, vpn: VirtPageNum) -> Result<(), ()> {
         tlb_invalidate();

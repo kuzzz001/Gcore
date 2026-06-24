@@ -42,6 +42,7 @@ pub trait PageTable {
     fn revoke_execute(&mut self, vpn: VirtPageNum) -> Result<(), ()>;
     fn set_ppn(&mut self, vpn: VirtPageNum, ppn: PhysPageNum) -> Result<(), ()>;
     fn set_pte_flags(&mut self, vpn: VirtPageNum, flags: MapPermission) -> Result<(), ()>;
+    fn get_pte_flags(&self, vpn: VirtPageNum) -> Option<MapPermission>;
     fn clear_access_bit(&mut self, vpn: VirtPageNum) -> Result<(), ()>;
     fn clear_dirty_bit(&mut self, vpn: VirtPageNum) -> Result<(), ()>;
     fn new() -> Self;
