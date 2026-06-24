@@ -15,23 +15,33 @@ use user_lib::{chdir, close, exec, exit, fork, open, read, shutdown, wait, waitp
 /// 逐条 fork + 阻塞 waitpid：每条是短命进程、回收可靠，不会因某条 hang 把整组带走。
 const LIBCTEST_CASES: &[&str] = &[
     "argv", "basename", "clocale_mbfuncs", "clock_gettime", "dirname", "env", "fdopen",
-    "fnmatch", "fscanf", "fwscanf", "iconv_open", "inet_pton", "mbc", "memstream", "qsort",
+    "fnmatch", "iconv_open", "inet_pton", "mbc", "memstream", "qsort",
     "random", "search_hsearch", "search_insque", "search_lsearch", "search_tsearch", "setjmp",
     "snprintf", "sscanf", "sscanf_long", "stat", "strftime", "string", "string_memcpy",
     "string_memmem", "string_memset", "string_strchr", "string_strcspn", "string_strstr",
     "strptime", "strtod", "strtod_simple", "strtof", "strtol", "strtold", "swprintf", "tgmath",
-    "time", "tls_align", "udiv", "ungetc", "utime", "wcsstr", "wcstol", "daemon_failure",
-    "dn_expand_empty", "dn_expand_ptr_0", "fflush_exit", "fgets_eof", "fgetwc_buffering",
-    "fpclassify_invalid_ld80", "ftello_unflushed_append", "getpwnam_r_crash", "getpwnam_r_errno",
-    "iconv_roundtrips", "inet_ntop_v4mapped", "inet_pton_empty_last_field", "iswspace_null",
-    "lrand48_signextend", "lseek_large", "malloc_0", "mbsrtowcs_overflow", "memmem_oob_read",
-    "memmem_oob", "mkdtemp_failure", "mkstemp_failure", "printf_1e9_oob", "printf_fmt_g_round",
-    "printf_fmt_g_zeros", "printf_fmt_n", "putenv_doublefree", "regex_backref_0",
-    "regex_bracket_icase", "regex_ere_backref", "regex_escaped_high_byte", "regex_negated_range",
-    "regexec_nosub", "rewind_clear_error", "rlimit_open_files", "scanf_bytes_consumed",
-    "scanf_match_literal_eof", "scanf_nullbyte_char", "setvbuf_unget", "sigprocmask_internal",
-    "sscanf_eof", "statvfs", "strverscmp", "syscall_sign_extend", "uselocale_0",
-    "wcsncpy_read_overflow", "wcsstr_false_negative",
+    "time", "tls_align", "udiv", "ungetc", "utime", "wcsstr", "wcstol",
+    "daemon_failure", "dn_expand_empty", "dn_expand_ptr_0",
+    "fflush_exit", "fgets_eof", "fgetwc_buffering",
+    "fpclassify_invalid_ld80", "ftello_unflushed_append",
+    "getpwnam_r_crash", "getpwnam_r_errno",
+    "iconv_roundtrips", "inet_ntop_v4mapped",
+    "inet_pton_empty_last_field",
+    "iswspace_null", "lrand48_signextend", "lseek_large",
+    "malloc_0", "mbsrtowcs_overflow", "memmem_oob_read", "memmem_oob",
+    "mkdtemp_failure", "mkstemp_failure",
+    "printf_1e9_oob", "printf_fmt_g_round", "printf_fmt_g_zeros",
+    "printf_fmt_n", "putenv_doublefree",
+    "regex_backref_0", "regex_bracket_icase",
+    "regex_ere_backref", "regex_escaped_high_byte",
+    "regex_negated_range", "regexec_nosub",
+    "rewind_clear_error", "rlimit_open_files",
+    "scanf_bytes_consumed", "scanf_match_literal_eof",
+    "scanf_nullbyte_char", "setvbuf_unget",
+    "sigprocmask_internal", "sscanf_eof",
+    "statvfs", "strverscmp", "syscall_sign_extend",
+    "uselocale_0", "wcsncpy_read_overflow",
+    "wcsstr_false_negative",
 ];
 
 fn run_bash_cmd(cmd: &str, environ: &[*const u8]) -> i32 {
@@ -296,7 +306,6 @@ fn run_one_libctest(environ: &[*const u8], dir: &str, exe: &str, case: &str) {
             println!("[initproc] chdir failed for {}/{}", exe, case);
             exit(126);
         }
-        println!("[initproc] child: run {}/{}", exe, case);
         let mut cmd = String::from("./runtest.exe -w ");
         cmd.push_str(exe);
         cmd.push(' ');

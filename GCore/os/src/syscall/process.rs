@@ -3,7 +3,8 @@ use crate::fs::OpenFlags;
 use crate::hal::shutdown;
 use crate::hal::{MachineContext, TrapContext};
 use crate::mm::{
-    copy_from_user, copy_to_user, copy_to_user_string, get_from_user, translated_byte_buffer,
+    copy_from_user, copy_to_user, copy_to_user_string, get_from_user, tlb_invalidate,
+    translated_byte_buffer,
     translated_ref, translated_refmut, translated_str, try_get_from_user, MapFlags, MapPermission,
     UserBuffer,
 };
@@ -1092,11 +1093,12 @@ pub fn sys_mprotect(addr: usize, len: usize, prot: usize) -> isize {
     let task = current_task().unwrap();
     let result = task.vm.lock().mprotect(addr, len, prot);
     match result {
-        Ok(_) => SUCCESS,
-        Err(errno) => {
-            crate::println!("[mprotect] FAIL addr={:#x} len={:#x} prot={:#x} err={}", addr, len, prot, errno);
-            errno
+        Ok(_) => {
+            // After modifying PTEs, flush the TLB so the hardware sees new permissions.
+            tlb_invalidate();
+            SUCCESS
         }
+        Err(errno) => errno,
     }
 }
 

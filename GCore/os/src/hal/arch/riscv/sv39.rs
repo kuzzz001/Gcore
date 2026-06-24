@@ -304,7 +304,6 @@ impl PageTable for Sv39PageTable {
         }
     }
     fn set_pte_flags(&mut self, vpn: VirtPageNum, flags: MapPermission) -> Result<(), ()> {
-        tlb_invalidate();
         if let Some(pte) = self.find_pte_refmut(vpn) {
             pte.set_permission(flags);
             Ok(())
