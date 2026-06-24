@@ -12,9 +12,10 @@ rustflags = [
     "-Clink-arg=-nostdlib",
     "-Clink-arg=-static",
     "-Cforce-frame-pointers=yes",
-    "-Clink-arg=--gc-sections",
 ]
-linker = "rust-lld"
+# 用 GNU 链接器而非 rust-lld：rust-lld 对 LoongArch 的重定位/relaxation 支持
+# 不成熟，会把 boot.rs 里 la.global 取符号地址算错，导致内核启动跳飞、零输出挂死。
+linker = "loongarch64-linux-gnu-gcc"
 
 [target.riscv64gc-unknown-none-elf]
 rustflags = [
