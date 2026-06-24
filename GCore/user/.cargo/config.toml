@@ -5,9 +5,10 @@ rustflags = [
     "-Clink-arg=-nostdlib",
     "-Clink-arg=-static",
     "-Cforce-frame-pointers=yes",
-    "-Clink-arg=--gc-sections",
 ]
-linker = "rust-lld"
+# 与内核一致：用 GNU ld 而非 rust-lld。rust-lld 链接 LoongArch 用户程序时
+# 会让两个 LOAD 段挤进同一个 4K 页，内核加载 ELF 时报 "Target addr already mapped"。
+linker = "loongarch64-linux-gnu-gcc"
 
 [target.riscv64gc-unknown-none-elf]
 rustflags = ["-Clink-args=-Tsrc/linker-rv.ld"]
