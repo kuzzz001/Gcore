@@ -632,9 +632,6 @@ pub fn sys_dup(oldfd: usize) -> isize {
 
 pub fn sys_dup2(oldfd: usize, newfd: usize) -> isize {
     let task = current_task().unwrap();
-    // if oldfd == newfd {
-    //     return EINVAL;
-    // }
     let mut fd_table = task.files.lock();
     let mut file_descriptor = match fd_table.get_ref(oldfd) {
         Ok(file_descriptor) => file_descriptor.clone(),
