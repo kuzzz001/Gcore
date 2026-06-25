@@ -308,7 +308,10 @@ impl<T: PageTable> MemorySet<T> {
                         return Err(MemoryError::BeyondEOF);
                     }
                     if area.map_perm.contains(MapPermission::W) {
-                        let allocated_ppn = area.map_one_zeroed_unchecked(&mut self.page_table, vpn);
+                        let allocated_ppn = match area.map_one_zeroed_unchecked(&mut self.page_table, vpn) {
+                            Some(ppn) => ppn,
+                            None => return Err(MemoryError::BadAddress),
+                        };
                         file.lseek(offset_in_area as isize, SeekWhence::SEEK_CUR)
                             .unwrap();
                         file.read(None, unsafe {
@@ -346,7 +349,13 @@ impl<T: PageTable> MemorySet<T> {
                         }
                         Frame::Unallocated => {
                             info!("[do_page_fault] addr: {:?}, solution: lazy alloc", addr);
-                            let ppn = area.map_one_zeroed_unchecked(&mut self.page_table, vpn);
+                            let ppn = match area.map_one_zeroed_unchecked(&mut self.page_table, vpn) {
+                                Some(ppn) => ppn,
+                                None => {
+                                    error!("[do_page_fault] frame alloc failed at addr {:?}", addr);
+                                    return Err(MemoryError::BadAddress);
+                                }
+                            };
                             let frame = area.inner.get_mut(&vpn);
                             info!(
                                 "[do_page_fault map_one] addr: {:?}, vpn: {:?}, frame: {:?}",
@@ -713,7 +722,6 @@ impl<T: PageTable> MemorySet<T> {
         memory_set.map_signaltrampoline();
         // map data sections/user heap/mmap area/user stack
         for i in 0..user_space.areas.len() - 1 {
-            // user_space.areas[i]
             let mut new_area = user_space.areas[i].clone();
             new_area
                 .map_from_existing_page_table(
@@ -723,7 +731,7 @@ impl<T: PageTable> MemorySet<T> {
                 .unwrap();
             memory_set.areas.push(new_area);
             debug!(
-                "[fork] map shared area: {:?}",
+                "[fork] map area: {:?}",
                 user_space.areas[i].inner.vpn_range
             );
         }

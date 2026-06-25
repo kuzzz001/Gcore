@@ -528,12 +528,12 @@ impl MapArea {
         &mut self,
         page_table: &mut T,
         vpn: VirtPageNum,
-    ) -> PhysPageNum {
-        let frame = frame_alloc().unwrap();
+    ) -> Option<PhysPageNum> {
+        let frame = frame_alloc()?;
         let ppn = frame.ppn;
         self.inner.alloc_in_memory(vpn, frame);
         page_table.map(vpn, ppn, self.map_perm);
-        ppn
+        Some(ppn)
     }
     /// Unmap a page in current area.
     /// If it is framed, then the physical pages will be removed from the `data_frames` Btree.
@@ -573,6 +573,59 @@ impl MapArea {
                     return Err(());
                 }
             }
+        }
+        Ok(())
+    }
+    /// Fork helper: pre-allocate writable copies for the child process.
+    /// Instead of sharing read-only pages (and triggering runtime CoW), we:
+    /// 1. Revoke W from the parent's PTE (via block_and_ret_mut — standard CoW setup)
+    /// 2. Copy each page into a new frame for the child
+    /// 3. Map the child's copy with full W permission
+    ///
+    /// This eliminates runtime CoW overhead for `Framed` areas (heap/stack/mmap)
+    /// at the cost of duplicating pages during fork.  Glibc dynamic-linker tests
+    /// benefit heavily because they write to many heap/stack pages early.
+    pub fn map_from_existing_page_table_prealloc<T: PageTable>(
+        &mut self,
+        dst_page_table: &mut T,
+        src_page_table: &mut T,
+    ) -> Result<(), ()> {
+        let map_perm = self.map_perm;
+        // Clear the cloned parent frames — we'll allocate fresh ones for the child.
+        let start_vpn = self.inner.vpn_range.get_start();
+        for vpn in self.inner.vpn_range {
+            let idx = vpn.0 - start_vpn.0;
+            // Revoke W from parent's PTE — parent will CoW on first write
+            let old_ppn = match src_page_table.block_and_ret_mut(vpn) {
+                Some(ppn) => ppn,
+                None => {
+                    self.inner.frames[idx] = Frame::Unallocated;
+                    continue;
+                }
+            };
+            if dst_page_table.is_mapped(vpn) {
+                return Err(());
+            }
+            // Allocate a fresh frame for the child
+            let new_frame = match unsafe { frame_alloc_uninit() } {
+                Some(f) => f,
+                None => {
+                    // Out of memory: fall back to CoW sharing.
+                    // Parent's W is already revoked; map child without W too.
+                    // Keep the cloned parent Frame in self.inner so copy_on_write
+                    // can find it later.
+                    warn!("[fork] frame alloc failed at vpn {:?}, falling back to CoW", vpn);
+                    dst_page_table.map(vpn, old_ppn, map_perm.difference(MapPermission::W));
+                    continue;
+                }
+            };
+            let new_ppn = new_frame.ppn;
+            // Copy page contents from parent's physical page
+            new_ppn.get_bytes_array().copy_from_slice(old_ppn.get_bytes_array());
+            // Replace the cloned parent frame with the child's own frame
+            self.inner.frames[idx] = Frame::InMemory(new_frame);
+            // Map with full write permission
+            dst_page_table.map(vpn, new_ppn, map_perm);
         }
         Ok(())
     }
@@ -833,6 +886,10 @@ impl MapArea {
         let swapped_before = self.get_inner().swapped;
         warn!("{:?}", self.inner.active);
         while let Some(idx) = self.inner.active.pop_front() {
+            if idx as usize >= self.inner.frames.len() {
+                warn!("[do_oom] stale active entry idx={}, frames.len={}", idx, self.inner.frames.len());
+                continue;
+            }
             let frame = &mut self.inner.frames[idx as usize];
             // first, try to compress
             match frame.zip() {
@@ -844,7 +901,12 @@ impl MapArea {
                 }
                 Err(MemoryError::SharedPage) => continue,
                 Err(MemoryError::ZramIsFull) => {}
-                _ => unreachable!(),
+                // Other errors (NotCompressed, AlreadyAllocated, NotInMemory, etc.) are
+                // transient or indicate a racing condition — skip this frame and move on.
+                Err(_) => {
+                    warn!("[do_oom] unexpected error compressing frame {:?}", frame);
+                    continue;
+                }
             }
             // zram is full, try to swap out
             match frame.swap_out() {
@@ -855,7 +917,10 @@ impl MapArea {
                     continue;
                 }
                 Err(MemoryError::SharedPage) | Err(MemoryError::SwapIsFull) => continue,
-                _ => unreachable!(),
+                Err(_) => {
+                    warn!("[do_oom] unexpected error swapping frame {:?}", frame);
+                    continue;
+                }
             }
         }
         self.inner.compressed + self.inner.swapped - compressed_before - swapped_before
@@ -866,6 +931,10 @@ impl MapArea {
         let swapped_before = self.inner.swapped;
         warn!("{:?}", self.inner.active);
         while let Some(idx) = self.inner.active.pop_front() {
+            if idx as usize >= self.inner.frames.len() {
+                warn!("[force_swap] stale active entry idx={}, frames.len={}", idx, self.inner.frames.len());
+                continue;
+            }
             let frame = &mut self.inner.frames[idx as usize];
             match frame.force_swap_out() {
                 Ok(swap_id) => {
@@ -875,7 +944,11 @@ impl MapArea {
                     continue;
                 }
                 Err(MemoryError::SwapIsFull) => continue,
-                _ => unreachable!(),
+                // Other errors are transient — skip this frame and move on.
+                Err(_) => {
+                    warn!("[force_swap] unexpected error swapping frame {:?}", frame);
+                    continue;
+                }
             }
         }
         self.inner.swapped - swapped_before

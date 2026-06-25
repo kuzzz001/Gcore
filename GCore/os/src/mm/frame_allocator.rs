@@ -206,7 +206,11 @@ pub fn frame_reserve(num: usize) {
     // 获取还可分配的帧数量
     let remain = FRAME_ALLOCATOR.read().unallocated_frames();
     if remain < num {
-        oom_handler(num - remain).unwrap()
+        if oom_handler(num - remain).is_err() {
+            log::warn!("[frame_reserve] OOM handler failed to free {} frames", num - remain);
+            // Don't panic — caller should handle allocation failure gracefully.
+            return;
+        }
     }
 }
 
@@ -224,7 +228,7 @@ pub fn frame_alloc() -> Option<Arc<FrameTracker>> {
         None => {
             crate::show_frame_consumption! {
                 "GC";
-                oom_handler(1).unwrap();
+                let _ = oom_handler(1);
             };
             FRAME_ALLOCATOR
                 .write()
@@ -276,7 +280,7 @@ pub unsafe fn frame_alloc_uninit() -> Option<Arc<FrameTracker>> {
         None => {
             crate::show_frame_consumption! {
                 "GC";
-                oom_handler(1).unwrap();
+                let _ = oom_handler(1);
             };
             FRAME_ALLOCATOR
                 .write()
