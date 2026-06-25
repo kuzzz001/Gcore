@@ -101,6 +101,14 @@ fn enumerate_pci() -> Option<PciTransport> {
                     }
                     if bar.takes_two_entries() {
                         println!("[PCI] BAR{} is 64-bit", bar_index);
+                        if let Some(verify) = pci_root.bar_info(device_function, bar_index).unwrap_or(None) {
+                            println!("[PCI] BAR{} after programming: {:?}", bar_index, verify);
+                            if let BarInfo::Memory { address: verify_addr, .. } = verify {
+                                if verify_addr == u64::MAX {
+                                    panic!("[PCI] BAR{} reads back as 0xFFFFFFFFFFFFFFFF after programming!", bar_index);
+                                }
+                            }
+                        }
                         bar_index += 1;
                     }
                 }
@@ -109,6 +117,18 @@ fn enumerate_pci() -> Option<PciTransport> {
 
             pci_root.set_command(device_function, Command::IO_SPACE | Command::MEMORY_SPACE | Command::BUS_MASTER);
             println!("[PCI] Device enabled.");
+
+            // Verify all BARs are sane before handing to transport layer.
+            let bars = pci_root.bars(device_function).expect("failed to read BARs");
+            for (idx, bar) in bars.iter().enumerate() {
+                if let Some(BarInfo::Memory { address, size, .. }) = bar {
+                    if *address == u64::MAX {
+                        panic!("[PCI] BAR{} has invalid address 0xFFFFFFFFFFFFFFFF after programming!", idx);
+                    }
+                    println!("[PCI] BAR{} final: addr={:#x} size={:#x}", idx, address, size);
+                }
+            }
+
             transport = Some(PciTransport::new::<VirtioHal, MmioCam>(&mut pci_root, device_function).unwrap());
             break;
         }
@@ -141,6 +161,9 @@ unsafe impl Hal for VirtioHal {
     }
 
     unsafe fn mmio_phys_to_virt(paddr: usize, _size: usize) -> NonNull<u8> {
+        if paddr == usize::MAX || paddr == 0 {
+            panic!("mmio_phys_to_virt: invalid physical address {:#x}", paddr);
+        }
         let vaddr = virtio_phys_to_virt(PhysAddr(paddr));
         NonNull::new(vaddr.0 as *mut u8).unwrap()
     }

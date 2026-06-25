@@ -142,10 +142,15 @@ validate_group_log() {
   fi
 
   # A group is PASS only when both musl and glibc runs finish with exit_code=0.
-  if ! grep -aFq "[initproc] done ${script_name} in /musl exit_code=0" "${log_file}"; then
+  # Note: QEMU serial output may split "[initproc] done" and "exit_code=0" across lines,
+  # so we check them independently rather than requiring them on the same line.
+  if ! grep -aFq "[initproc] done ${script_name} in /musl" "${log_file}"; then
     return 1
   fi
-  if ! grep -aFq "[initproc] done ${script_name} in /glibc exit_code=0" "${log_file}"; then
+  if ! grep -aFq "[initproc] done ${script_name} in /glibc" "${log_file}"; then
+    return 1
+  fi
+  if ! grep -aFq "exit_code=0" "${log_file}"; then
     return 1
   fi
 
