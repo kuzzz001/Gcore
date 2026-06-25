@@ -1506,11 +1506,7 @@ pub fn sys_setgroups(size: usize, list: *const u32) -> isize {
 }
 
 pub fn sys_getrlimit(resource: usize, rlim: *mut u8) -> isize {
-    let resource = Resource::from_primitive(resource);
-    if resource.is_none() {
-        return EINVAL;
-    }
-    let resource = resource.unwrap();
+    let resource = Resource::from_primitive(resource as u32);
     if rlim.is_null() {
         return EFAULT;
     }
@@ -1541,11 +1537,7 @@ pub fn sys_getrlimit(resource: usize, rlim: *mut u8) -> isize {
 }
 
 pub fn sys_setrlimit(resource: usize, rlim: *const u8) -> isize {
-    let resource = Resource::from_primitive(resource);
-    if resource.is_none() {
-        return EINVAL;
-    }
-    let resource = resource.unwrap();
+    let resource = Resource::from_primitive(resource as u32);
     if rlim.is_null() {
         return EFAULT;
     }
