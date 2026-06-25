@@ -100,7 +100,7 @@ ifeq ($(BOARD), laqemu)
 		-bios $(BOOTLOADER) \
 		-device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA) \
 		-drive if=none,file=$(ROOTFS_IMG),format=raw,id=x0 \
-		-device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 \
+		-device virtio-blk-pci,drive=x0 \
 		-m 1024 \
 		-smp threads=$(CORE_NUM)
 endif
@@ -115,7 +115,7 @@ gdb:
 		-bios $(BOOTLOADER) \
 		-device loader,file=target/loongarch64-unknown-none/debug/os,addr=$(KERNEL_ENTRY_PA) \
 		-drive file=$(ROOTFS_IMG),if=none,format=raw,id=x0 \
-		-device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 \
+		-device virtio-blk-pci,drive=x0 \
 		-m 1024 \
 		-smp threads=$(CORE_NUM) -S -s | tee qemu.log
 
@@ -127,7 +127,7 @@ runsimple:
 		-device loader,file=$(KERNEL_ELF),addr=$(KERNEL_ENTRY_PA) \
 		-drive file=$(ROOTFS_IMG),if=none,format=raw,id=x0 \
 		-m 1024 \
-		-device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 \
+		-device virtio-blk-pci,drive=x0 \
 		-smp threads=$(CORE_NUM)
 
 comp:

@@ -633,6 +633,9 @@ impl MapArea {
             Ok(())
         }
     }
+    /// Perform CoW: strong_count==1 → just flip PTE W bit; else → copy page.
+    /// After modifying PTEs we execute a local sfence.vma so the hardware
+    /// re-walks the page table instead of reusing a stale TLB entry.
     pub fn copy_on_write<T: PageTable>(
         &mut self,
         page_table: &mut T,
@@ -646,7 +649,8 @@ impl MapArea {
             let old_ppn = old_frame.ppn;
             self.inner.alloc_in_memory(vpn, old_frame);
             page_table.set_pte_flags(vpn, self.map_perm).unwrap();
-
+            // Local TLB flush for the PTE modification above.
+            unsafe { core::arch::asm!("sfence.vma") };
             trace!("[copy_on_write] no copy occurred");
             Ok(old_ppn)
         } else {
@@ -662,6 +666,11 @@ impl MapArea {
             new_ppn
                 .get_bytes_array()
                 .copy_from_slice(old_ppn.get_bytes_array());
+            // Local TLB flush: after unmapping the old PTE and mapping a new one,
+            // the hart's TLB may still cache the old (W-revoked or invalid) entry.
+            // Use sfence.vma only (no remote_sfence_vma SBI ecall — that corrupts
+            // the trap flow in page-fault context).
+            unsafe { core::arch::asm!("sfence.vma") };
             trace!("[copy_on_write] copy occurred");
             Ok(new_ppn)
         }
