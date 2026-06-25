@@ -45,7 +45,6 @@ pub const SYSCALL_TIMERFD_CREATE: usize = 85;
 pub const SYSCALL_TIMERFD_SETTIME: usize = 86;
 pub const SYSCALL_TIMERFD_GETTIME: usize = 87;
 pub const SYSCALL_UTIMENSAT: usize = 88;
-pub const SYSCALL_UTIME: usize = 132;  // obsolete, but musl may still invoke it
 pub const SYSCALL_PERSONALITY: usize = 92;
 pub const SYSCALL_EXIT: usize = 93;
 pub const SYSCALL_EXIT_GROUP: usize = 94;

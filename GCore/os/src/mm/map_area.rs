@@ -410,9 +410,12 @@ pub struct MapArea {
     /// Map physical page frame tracker to virtual pages for RAII & lookup.
     pub inner: LinearMap,
     /// Direct or framed(virtual) mapping?
-    map_type: MapType,
+    pub map_type: MapType,
     /// Permissions which are the or of RWXU, where U stands for user.
     pub map_perm: MapPermission,
+    /// True if mprotect() explicitly stripped W from this area.
+    /// When set, page-fault CoW is disabled for writes (SIGSEGV).
+    pub writable_stripped: bool,
     pub map_file: Option<Arc<dyn File>>,
 }
 
@@ -437,6 +440,7 @@ impl MapArea {
             inner: LinearMap::new(VPNRange::new(start_vpn, end_vpn)),
             map_type,
             map_perm,
+            writable_stripped: false,
             map_file,
         }
     }
@@ -450,6 +454,7 @@ impl MapArea {
             )),
             map_type: another.map_type,
             map_perm: another.map_perm,
+            writable_stripped: another.writable_stripped,
             map_file: another.map_file.clone(),
         }
     }
@@ -479,6 +484,7 @@ impl MapArea {
             },
             map_type,
             map_perm,
+            writable_stripped: false,
             map_file: None,
         }
     }
@@ -782,6 +788,7 @@ impl MapArea {
             inner: second_frames,
             map_type: self.map_type,
             map_perm: self.map_perm,
+            writable_stripped: self.writable_stripped,
             map_file: second_file,
         })
     }
@@ -800,12 +807,14 @@ impl MapArea {
                 inner: second_frames,
                 map_type: self.map_type,
                 map_perm: self.map_perm,
+                writable_stripped: self.writable_stripped,
                 map_file: None,
             },
             MapArea {
                 inner: third_frames,
                 map_type: self.map_type,
                 map_perm: self.map_perm,
+                writable_stripped: self.writable_stripped,
                 map_file: None,
             },
         ))

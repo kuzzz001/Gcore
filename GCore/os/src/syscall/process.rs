@@ -1094,7 +1094,6 @@ pub fn sys_mprotect(addr: usize, len: usize, prot: usize) -> isize {
     let result = task.vm.lock().mprotect(addr, len, prot);
     match result {
         Ok(_) => {
-            // After modifying PTEs, flush the TLB so the hardware sees new permissions.
             tlb_invalidate();
             SUCCESS
         }

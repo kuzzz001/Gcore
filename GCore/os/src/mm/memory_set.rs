@@ -381,8 +381,19 @@ impl<T: PageTable> MemorySet<T> {
                 }
             } else {
                 // mapped before the assignment
-                if area.map_perm.contains(MapPermission::W) {
+                if area.writable_stripped {
+                    // mprotect explicitly removed W — reject writes
+                    error!(
+                        "[do_page_fault] addr: {:?}, result: write no permission (stripped)",
+                        addr
+                    );
+                    Err(MemoryError::NoPermission)
+                } else if area.map_perm.contains(MapPermission::W)
+                    || area.map_type == MapType::Framed
+                {
                     // Whoever triggers this fault shall cause the area to be copied into a new area.
+                    // Framed areas (mmap/brk/heap) are conceptually writable even if map_perm
+                    // lost W due to mprotect on a different area.
                     let allocated_ppn = area.copy_on_write(&mut self.page_table, vpn)?;
                     info!("[do_page_fault] addr: {:?}, solution: copy on write", addr);
                     Ok(allocated_ppn.offset(addr.page_offset()))
@@ -1040,6 +1051,8 @@ impl<T: PageTable> MemorySet<T> {
             // and preserve the real Execute bit from hardware PTEs.
             let pte_flags = prot.difference(MapPermission::W) | real_x;
             let area_perm = prot | real_x;
+            let stripping_w = self.areas[area_idx].map_perm.contains(MapPermission::W)
+                && !area_perm.contains(MapPermission::W);
 
             // Try to split and update the MapArea. On failure, update PTEs directly.
             let split_ok = if seg_start == area_start && seg_end == area_end {
@@ -1048,6 +1061,7 @@ impl<T: PageTable> MemorySet<T> {
                     let _ = page_table.set_pte_flags(vpn, pte_flags);
                 }
                 area.map_perm = area_perm;
+                if stripping_w { area.writable_stripped = true; }
                 true
             } else if seg_start == area_start {
                 if let Ok(second) = self.areas[area_idx].into_two(seg_end) {
@@ -1057,6 +1071,7 @@ impl<T: PageTable> MemorySet<T> {
                         let _ = page_table.set_pte_flags(vpn, pte_flags);
                     }
                     area.map_perm = area_perm;
+                    if stripping_w { area.writable_stripped = true; }
                     true
                 } else {
                     false
@@ -1069,6 +1084,7 @@ impl<T: PageTable> MemorySet<T> {
                         let _ = page_table.set_pte_flags(vpn, pte_flags);
                     }
                     area.map_perm = area_perm;
+                    if stripping_w { area.writable_stripped = true; }
                     true
                 } else {
                     false
@@ -1082,6 +1098,7 @@ impl<T: PageTable> MemorySet<T> {
                         let _ = page_table.set_pte_flags(vpn, pte_flags);
                     }
                     area.map_perm = area_perm;
+                    if stripping_w { area.writable_stripped = true; }
                     true
                 } else {
                     false
