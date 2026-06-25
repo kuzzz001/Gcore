@@ -12,6 +12,12 @@ pub fn tlb_invalidate() {
     // SMP TLB shootdown: broadcast to all harts
     crate::hal::arch::riscv::sbi::remote_sfence_vma(0, 0);
 }
+
+/// Local TLB flush only — safe to call in page-fault context (no SBI ecall).
+#[inline(always)]
+pub fn tlb_flush_local() {
+    unsafe { asm!("sfence.vma"); }
+}
 bitflags! {
     /// Page Table Entry flags
     pub struct PTEFlags: u8 {

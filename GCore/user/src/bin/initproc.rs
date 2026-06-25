@@ -306,7 +306,7 @@ fn run_one_libctest(environ: &[*const u8], dir: &str, exe: &str, case: &str) {
             println!("[initproc] chdir failed for {}/{}", exe, case);
             exit(126);
         }
-        let mut cmd = String::from("./runtest.exe -w ");
+        let mut cmd = String::from("./runtest.exe -t 60 -w ");
         cmd.push_str(exe);
         cmd.push(' ');
         cmd.push_str(case);

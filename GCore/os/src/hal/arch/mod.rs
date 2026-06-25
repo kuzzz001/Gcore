@@ -11,7 +11,7 @@ pub use loongarch64::{
     config::MEMORY_HIGH_BASE,
     console_flush, console_getchar, console_putchar, machine_init, shutdown,
     time::{get_clock_freq, get_time, TICKS_PER_SEC},
-    KernelPageTableImpl, PageTableImpl, __switch, kstack_alloc, tlb_invalidate,
+    KernelPageTableImpl, PageTableImpl, __switch, kstack_alloc, tlb_flush_local, tlb_invalidate,
     trap::{
         get_bad_addr, get_bad_instruction, get_exception_cause, trap_handler, trap_return,
         MachineContext, TrapContext, TrapImpl, UserContext,
@@ -31,6 +31,7 @@ pub use riscv::{
     machine_init,
     rv_board::MMIO,
     sbi::{console_flush, console_getchar, console_putchar, set_timer, shutdown},
+    sv39::tlb_flush_local,
     sv39::tlb_invalidate,
     switch::__switch,
     time::{get_clock_freq, get_time, TICKS_PER_SEC},

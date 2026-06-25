@@ -35,6 +35,11 @@ pub fn tlb_invalidate() {
         asm!("invtlb 0x3,$zero, $zero");
     }
 }
+/// Local TLB flush only — LA invtlb is already local-only.
+#[inline(always)]
+pub fn tlb_flush_local() {
+    tlb_invalidate();
+}
 #[inline(always)]
 pub fn tlb_global_invalidate() {
     unsafe {

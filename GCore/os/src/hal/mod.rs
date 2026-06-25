@@ -3,6 +3,7 @@ pub use arch::__switch;
 pub use arch::config;
 pub use arch::kstack_alloc;
 pub use arch::shutdown;
+pub use arch::tlb_flush_local;
 pub use arch::tlb_invalidate;
 pub use arch::{bootstrap_init, machine_init};
 pub use arch::{console_flush, console_getchar, console_putchar};

@@ -650,7 +650,7 @@ impl MapArea {
             self.inner.alloc_in_memory(vpn, old_frame);
             page_table.set_pte_flags(vpn, self.map_perm).unwrap();
             // Local TLB flush for the PTE modification above.
-            unsafe { core::arch::asm!("sfence.vma") };
+            crate::hal::tlb_flush_local();
             trace!("[copy_on_write] no copy occurred");
             Ok(old_ppn)
         } else {
@@ -668,9 +668,7 @@ impl MapArea {
                 .copy_from_slice(old_ppn.get_bytes_array());
             // Local TLB flush: after unmapping the old PTE and mapping a new one,
             // the hart's TLB may still cache the old (W-revoked or invalid) entry.
-            // Use sfence.vma only (no remote_sfence_vma SBI ecall — that corrupts
-            // the trap flow in page-fault context).
-            unsafe { core::arch::asm!("sfence.vma") };
+            crate::hal::tlb_flush_local();
             trace!("[copy_on_write] copy occurred");
             Ok(new_ppn)
         }
