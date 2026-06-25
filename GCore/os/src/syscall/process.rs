@@ -1506,12 +1506,66 @@ pub fn sys_setgroups(size: usize, list: *const u32) -> isize {
 }
 
 pub fn sys_getrlimit(resource: usize, rlim: *mut u8) -> isize {
-    trace!("[sys_getrlimit] resource={}", resource);
+    let resource = Resource::from_primitive(resource);
+    if resource.is_none() {
+        return EINVAL;
+    }
+    let resource = resource.unwrap();
+    if rlim.is_null() {
+        return EFAULT;
+    }
+    let token = current_user_token();
+    let rlimit = match resource {
+        Resource::NOFILE => {
+            let task = current_task().unwrap();
+            let lock = task.files.lock();
+            RLimit {
+                rlim_cur: lock.get_soft_limit(),
+                rlim_max: lock.get_hard_limit(),
+            }
+        }
+        Resource::STACK => RLimit {
+            rlim_cur: USER_STACK_SIZE,
+            rlim_max: USER_STACK_SIZE,
+        },
+        Resource::NPROC => RLimit {
+            rlim_cur: SYSTEM_TASK_LIMIT,
+            rlim_max: SYSTEM_TASK_LIMIT,
+        },
+        _ => RLimit { rlim_cur: 0, rlim_max: 0 },
+    };
+    if let Err(e) = copy_to_user(token, &rlimit, rlim as *mut RLimit) {
+        return e;
+    }
     SUCCESS
 }
 
 pub fn sys_setrlimit(resource: usize, rlim: *const u8) -> isize {
-    trace!("[sys_setrlimit] resource={}", resource);
+    let resource = Resource::from_primitive(resource);
+    if resource.is_none() {
+        return EINVAL;
+    }
+    let resource = resource.unwrap();
+    if rlim.is_null() {
+        return EFAULT;
+    }
+    let token = current_user_token();
+    let rlimit = match get_from_user(token, rlim as *const RLimit) {
+        Ok(v) => v,
+        Err(errno) => return errno,
+    };
+    match resource {
+        Resource::NOFILE => {
+            let task = current_task().unwrap();
+            let mut fd_table = task.files.lock();
+            fd_table.set_soft_limit(rlimit.rlim_cur);
+            fd_table.set_hard_limit(rlimit.rlim_max);
+        }
+        Resource::STACK | Resource::NPROC => {
+            // accepted but silently capped at system limits
+        }
+        _ => {} // silently accept
+    }
     SUCCESS
 }
 
