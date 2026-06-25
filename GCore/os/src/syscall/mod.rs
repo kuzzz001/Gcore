@@ -63,6 +63,7 @@ pub fn syscall_name(id: usize) -> &'static str {
         SYSCALL_TIMERFD_SETTIME => "timerfd_settime",
         SYSCALL_TIMERFD_GETTIME => "timerfd_gettime",
         SYSCALL_UTIMENSAT => "utimensat",
+        SYSCALL_UTIME => "utime",
         SYSCALL_PERSONALITY => "personality",
         SYSCALL_EXIT => "exit",
         SYSCALL_EXIT_GROUP => "exit_GROUP",
@@ -275,6 +276,10 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
             args[1] as *const u8,
             args[2] as *const [TimeSpec; 2],
             args[3] as u32,
+        ),
+        SYSCALL_UTIME => sys_utime(
+            args[0] as *const u8,
+            args[1] as *const Utimbuf,
         ),
         SYSCALL_EXIT => sys_exit(args[0] as u32),
         SYSCALL_EXIT_GROUP => sys_exit_group(args[0] as u32),

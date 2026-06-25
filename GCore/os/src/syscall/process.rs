@@ -1117,37 +1117,38 @@ pub fn sys_munlockall() -> isize {
 }
 
 pub fn sys_clock_gettime(clk_id: usize, tp: *mut TimeSpec) -> isize {
-    if !tp.is_null() {
-        let token = current_user_token();
-        let timespec = match clk_id {
-            // CLOCK_REALTIME = 0: system-wide real-time clock
-            0 => {
-                let unix_ts = crate::timer::current_time();
-                let ns = crate::timer::get_time_ns() % crate::timer::NSEC_PER_SEC;
-                TimeSpec {
-                    tv_sec: unix_ts as usize,
-                    tv_nsec: ns,
-                }
-            }
-            // CLOCK_MONOTONIC = 1, CLOCK_BOOTTIME = 7: unaffected by system time changes
-            1 | 7 => TimeSpec::now(),
-            // CLOCK_MONOTONIC_RAW = 4: raw hardware time
-            4 => TimeSpec::now(),
-            // CLOCK_REALTIME_COARSE = 5, CLOCK_MONOTONIC_COARSE = 6
-            5 => {
-                let unix_ts = crate::timer::current_time();
-                TimeSpec {
-                    tv_sec: unix_ts as usize,
-                    tv_nsec: 0,
-                }
-            }
-            6 => TimeSpec::now(),
-            _ => TimeSpec::now(),
-        };
-        if let Err(e) = copy_to_user(token, &timespec, tp) {
-            return e;
-        };
+    if tp.is_null() {
+        return EFAULT;
     }
+    let token = current_user_token();
+    let timespec = match clk_id {
+        // CLOCK_REALTIME = 0: system-wide real-time clock
+        0 => {
+            let unix_ts = crate::timer::current_time();
+            let ns = crate::timer::get_time_ns() % crate::timer::NSEC_PER_SEC;
+            TimeSpec {
+                tv_sec: unix_ts as usize,
+                tv_nsec: ns,
+            }
+        }
+        // CLOCK_MONOTONIC = 1, CLOCK_BOOTTIME = 7: unaffected by system time changes
+        1 | 7 => TimeSpec::now(),
+        // CLOCK_MONOTONIC_RAW = 4: raw hardware time
+        4 => TimeSpec::now(),
+        // CLOCK_REALTIME_COARSE = 5, CLOCK_MONOTONIC_COARSE = 6
+        5 => {
+            let unix_ts = crate::timer::current_time();
+            TimeSpec {
+                tv_sec: unix_ts as usize,
+                tv_nsec: 0,
+            }
+        }
+        6 => TimeSpec::now(),
+        _ => TimeSpec::now(),
+    };
+    if let Err(e) = copy_to_user(token, &timespec, tp) {
+        return e;
+    };
     SUCCESS
 }
 pub fn sys_clock_nanosleep(

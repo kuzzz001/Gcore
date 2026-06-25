@@ -1324,6 +1324,50 @@ bitflags! {
     }
 }
 
+/// Obsolete `struct utimbuf` used by the utime() syscall.
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct Utimbuf {
+    pub actime: usize,  // access time (time_t)
+    pub modtime: usize, // modification time (time_t)
+}
+
+/// sys_utime — set file access and modification times (obsolete wrapper).
+/// Converts `struct utimbuf` → `struct timespec[2]` and delegates to utimensat.
+pub fn sys_utime(pathname: *const u8, times: *const Utimbuf) -> isize {
+    let token = current_user_token();
+    let path = if !pathname.is_null() {
+        match translated_str(token, pathname) {
+            Ok(path) => path,
+            Err(errno) => return errno,
+        }
+    } else {
+        return EFAULT;
+    };
+
+    if !times.is_null() {
+        let ut = match get_from_user(token, times) {
+            Ok(v) => v,
+            Err(errno) => return errno,
+        };
+        let ts: [TimeSpec; 2] = [
+            TimeSpec { tv_sec: ut.actime, tv_nsec: 0 },
+            TimeSpec { tv_sec: ut.modtime, tv_nsec: 0 },
+        ];
+        // Re-use utimensat's open+set_timestamp logic inline
+        let inode = match __openat(AT_FDCWD, &path) {
+            Ok(inode) => inode,
+            Err(errno) => return errno,
+        };
+        inode.set_timestamp(None, Some(ut.actime), Some(ut.modtime)).unwrap();
+        SUCCESS
+    } else {
+        // times == NULL → set both timestamps to "now"
+        // Delegate to utimensat with NULL times
+        sys_utimensat(AT_FDCWD, pathname, core::ptr::null(), 0)
+    }
+}
+
 pub fn sys_utimensat(
     dirfd: usize,
     pathname: *const u8,
@@ -1360,9 +1404,12 @@ pub fn sys_utimensat(
     };
 
     let now = TimeSpec::now();
+    // TimeSpec::now() returns uptime (ticks since boot), but POSIX mtime/atime
+    // must be Unix epoch time. Use current_time() for the real-world clock.
+    let unix_now = crate::timer::current_time() as usize;
     let timespec = &mut [now; 2];
-    let mut atime = Some(now.tv_sec);
-    let mut mtime = Some(now.tv_sec);
+    let mut atime = Some(unix_now);
+    let mut mtime = Some(unix_now);
     if !times.is_null() {
         if copy_from_user(token, times, timespec).is_err() {
             log::error!("[sys_utimensat] Failed to copy from {:?}", times);
