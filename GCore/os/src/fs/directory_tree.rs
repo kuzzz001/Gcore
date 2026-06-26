@@ -798,7 +798,7 @@ fn init_proc_directory() {
     let meminfo_dev = DirectoryTreeNode::new(
         "meminfo".to_string(),
         Arc::new(FileSystem::new(FS_Type::Null)),
-        Arc::new(ProcMeminfo {}),
+        Arc::new(ProcMeminfo { offset: spin::Mutex::new(0) }),
         Arc::downgrade(&proc_inode.get_arc()),
     );
     let mut lock = proc_inode.children.write();

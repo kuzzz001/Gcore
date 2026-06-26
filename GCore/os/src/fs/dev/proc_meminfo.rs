@@ -8,12 +8,15 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt::Write;
 
-pub struct ProcMeminfo;
+pub struct ProcMeminfo {
+    /// 已读偏移：读到内容末尾后返回 0(EOF)，否则程序循环读 /proc/meminfo 会死转。
+    pub offset: spin::Mutex<usize>,
+}
 
 #[allow(unused)]
 impl File for ProcMeminfo {
     fn deep_clone(&self) -> Arc<dyn File> {
-        Arc::new(ProcMeminfo {})
+        Arc::new(ProcMeminfo { offset: spin::Mutex::new(0) })
     }
 
     fn readable(&self) -> bool {
@@ -85,7 +88,14 @@ impl File for ProcMeminfo {
         let _ = write!(s, "Cached:         {:8} kB\n", 0u32);
 
         let bytes = s.into_bytes();
-        buf.write(&bytes)
+        // 按已读偏移返回剩余内容；读到末尾返回 0(EOF)，避免循环读死转。
+        let mut off = self.offset.lock();
+        if *off >= bytes.len() {
+            return 0;
+        }
+        let n = buf.write(&bytes[*off..]);
+        *off += n;
+        n
     }
 
     fn write_user(&self, _offset: Option<usize>, _buf: UserBuffer) -> usize {
@@ -107,7 +117,7 @@ impl File for ProcMeminfo {
     }
 
     fn open(&self, _flags: crate::fs::layout::OpenFlags, _special_use: bool) -> Arc<dyn File> {
-        Arc::new(ProcMeminfo {})
+        Arc::new(ProcMeminfo { offset: spin::Mutex::new(0) })
     }
 
     fn open_subfile(
