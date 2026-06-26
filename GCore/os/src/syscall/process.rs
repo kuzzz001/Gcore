@@ -340,17 +340,31 @@ pub fn sys_getegid() -> isize {
 // So it just pretend to do this work.
 // Fortunately, that won't make difference when we just try to run busybox sh so far.
 pub fn sys_setpgid(pid: usize, pgid: usize) -> isize {
-    /* An attempt.*/
-    let task = crate::task::find_task_by_tgid(pid);
+    // pid == 0 表示调用进程自身
+    let real_pid = if pid == 0 {
+        current_task().unwrap().tgid
+    } else {
+        pid
+    };
+    let task = crate::task::find_task_by_tgid(real_pid);
     match task {
-        Some(task) => task.setpgid(pgid),
+        Some(task) => {
+            // pgid == 0 表示用目标进程自身的 pid 作为 pgid
+            let real_pgid = if pgid == 0 { real_pid } else { pgid };
+            task.setpgid(real_pgid)
+        }
         None => ESRCH,
     }
 }
 
 pub fn sys_getpgid(pid: usize) -> isize {
-    /* An attempt.*/
-    let task = crate::task::find_task_by_tgid(pid);
+    // pid == 0 表示调用进程自身
+    let real_pid = if pid == 0 {
+        current_task().unwrap().tgid
+    } else {
+        pid
+    };
+    let task = crate::task::find_task_by_tgid(real_pid);
     match task {
         Some(task) => task.getpgid() as isize,
         None => ESRCH,
