@@ -404,7 +404,7 @@ impl Block {
 
     // 将读到的块作为指定的类型，同时附带一个偏移量
     pub fn read_offset_as<T>(&self, offset: usize) -> T {
-        let block_size = *GLOBAL_BLOCK_SIZE;
+        let block_size = crate::hal::BLOCK_SZ;
         unsafe {
             let offset = offset % block_size;
             let ptr = self.data.as_ptr().add(offset) as *const T;
@@ -413,8 +413,7 @@ impl Block {
     }
 
     pub fn read_offset_as_superblock(&self, offset: usize) -> Ext4Superblock {
-        // 暂时先使用2048
-        let block_size = 4096;
+        let block_size = crate::hal::BLOCK_SZ;
         unsafe {
             let offset = offset % block_size;
             let ptr = self.data.as_ptr().add(offset) as *const Ext4Superblock;
@@ -432,7 +431,7 @@ impl Block {
 
     // 将读到的块作为指定的类型，同时附带一个偏移量，并且返回一个可变引用
     pub fn read_offset_as_mut<T>(&mut self, offset: usize) -> &mut T {
-        let block_size = *GLOBAL_BLOCK_SIZE;
+        let block_size = crate::hal::BLOCK_SZ;
         unsafe {
             let offset = offset % block_size;
             let ptr = self.data.as_mut_ptr().add(offset) as *mut T;
