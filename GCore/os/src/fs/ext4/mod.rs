@@ -4,7 +4,7 @@ mod bitmap;
 mod block_group;
 mod crc;
 mod direntry;
-mod error;
+pub mod error;
 mod ext4_inode;
 pub mod ext4fs;
 mod extent;

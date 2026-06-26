@@ -104,10 +104,15 @@ pub fn flush_preload() {
         extern "C" {
             fn sldmusl();
             fn eldmusl();
+            fn sldglibc();
+            fn eldglibc();
         }
+        // /lib64 might exist on OJ disk
         ROOT_FD
             .mkdir("lib64")
+            .or_else(|e| if e == 17 || e == -17 /* EEXIST */ || e == -1 { Ok(()) } else { Err(e) })
             .expect("Failed to create /lib64");
+        // musl dynamic linker
         let ld_musl = ROOT_FD
             .open(
                 "lib64/ld-musl-loongarch-lp64d.so.1",
@@ -121,14 +126,28 @@ pub fn flush_preload() {
                 eldmusl as usize - sldmusl as usize,
             )
         });
+        // glibc dynamic linker
+        let ld_glibc = ROOT_FD
+            .open(
+                "lib64/ld-linux-loongarch-lp64d.so.1",
+                OpenFlags::O_CREAT,
+                false,
+            )
+            .expect("Failed to create ld-linux");
+        ld_glibc.write(None, unsafe {
+            core::slice::from_raw_parts(
+                sldglibc as *const u8,
+                eldglibc as usize - sldglibc as usize,
+            )
+        });
         // Also put libc.so in /musl/lib/ for musl library resolution
         ROOT_FD
             .mkdir("musl")
-            .or_else(|e| if e == -1 { Err(e) } else { Ok(()) })
+            .or_else(|e| if e == 17 || e == -17 /* EEXIST */ || e == -1 { Ok(()) } else { Err(e) })
             .expect("Failed to create /musl");
         ROOT_FD
             .mkdir("musl/lib")
-            .or_else(|e| if e == -1 { Err(e) } else { Ok(()) })
+            .or_else(|e| if e == 17 || e == -17 /* EEXIST */ || e == -1 { Ok(()) } else { Err(e) })
             .expect("Failed to create /musl/lib");
         let libc_musl = ROOT_FD
             .open("musl/lib/libc.so", OpenFlags::O_CREAT, false)
@@ -139,10 +158,16 @@ pub fn flush_preload() {
                 eldmusl as usize - sldmusl as usize,
             )
         });
-        // Free embedded pages
+        // Free embedded pages (two ranges)
         for ppn in crate::mm::PPNRange::new(
             crate::mm::PhysAddr::from(sldmusl as usize).floor(),
             crate::mm::PhysAddr::from(eldmusl as usize).floor(),
+        ) {
+            crate::mm::frame_dealloc(ppn);
+        }
+        for ppn in crate::mm::PPNRange::new(
+            crate::mm::PhysAddr::from(sldglibc as usize).floor(),
+            crate::mm::PhysAddr::from(eldglibc as usize).floor(),
         ) {
             crate::mm::frame_dealloc(ppn);
         }
@@ -156,6 +181,11 @@ pub fn flush_preload() {
             fn sldglibc();
             fn eldglibc();
         }
+        // /lib might not exist on OJ disk — create it
+        ROOT_FD
+            .mkdir("lib")
+            .or_else(|e| if e == 17 || e == -17 /* EEXIST */ || e == -1 { Ok(()) } else { Err(e) })
+            .expect("Failed to create /lib");
         // musl: libc.so IS the dynamic linker, just at /lib/ld-musl-riscv64.so.1
         let ld_musl = ROOT_FD
             .open(
@@ -187,11 +217,11 @@ pub fn flush_preload() {
         // Also put libc.so in /musl/lib/ and /glibc/lib/
         ROOT_FD
             .mkdir("musl")
-            .or_else(|e| if e == -1 { Err(e) } else { Ok(()) })
+            .or_else(|e| if e == 17 || e == -17 /* EEXIST */ || e == -1 { Ok(()) } else { Err(e) })
             .expect("Failed to create /musl");
         ROOT_FD
             .mkdir("musl/lib")
-            .or_else(|e| if e == -1 { Err(e) } else { Ok(()) })
+            .or_else(|e| if e == 17 || e == -17 /* EEXIST */ || e == -1 { Ok(()) } else { Err(e) })
             .expect("Failed to create /musl/lib");
         let libc_musl = ROOT_FD
             .open("musl/lib/libc.so", OpenFlags::O_CREAT, false)
@@ -204,11 +234,11 @@ pub fn flush_preload() {
         });
         ROOT_FD
             .mkdir("glibc")
-            .or_else(|e| if e == -1 { Err(e) } else { Ok(()) })
+            .or_else(|e| if e == 17 || e == -17 /* EEXIST */ || e == -1 { Ok(()) } else { Err(e) })
             .expect("Failed to create /glibc");
         ROOT_FD
             .mkdir("glibc/lib")
-            .or_else(|e| if e == -1 { Err(e) } else { Ok(()) })
+            .or_else(|e| if e == 17 || e == -17 /* EEXIST */ || e == -1 { Ok(()) } else { Err(e) })
             .expect("Failed to create /glibc/lib");
         let libc_glibc = ROOT_FD
             .open("glibc/lib/libc.so.6", OpenFlags::O_CREAT, false)

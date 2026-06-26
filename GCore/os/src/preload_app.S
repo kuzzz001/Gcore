@@ -33,3 +33,12 @@ sldmusl:
     .incbin "./ld-musl-loongarch-lp64d.so.1"
 eldmusl:
     .align 12
+
+    .section .data
+    .global sldglibc
+    .global eldglibc
+    .align 12
+sldglibc:
+    .incbin "./ld-linux-loongarch-lp64d.so.1"
+eldglibc:
+    .align 12
