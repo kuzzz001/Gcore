@@ -24,3 +24,12 @@ sbusybox:
     .incbin "./busybox-la"
 ebusybox:
     .align 12
+
+    .section .data
+    .global sldmusl
+    .global eldmusl
+    .align 12
+sldmusl:
+    .incbin "./ld-musl-loongarch-lp64d.so.1"
+eldmusl:
+    .align 12
