@@ -24,34 +24,22 @@ use spin::{Mutex, MutexGuard, RwLock, RwLockWriteGuard};
 
 lazy_static! {
     // 文件系统实例
-    pub static ref FILE_SYSTEM: Arc<dyn VFS> = {
-        println!("[debug] FILE_SYSTEM lazy init: calling open_fs");
-        let result = <dyn VFS>::open_fs(BLOCK_DEVICE.clone(), Arc::new(Mutex::new(BlockCacheManager::new())));
-        println!("[debug] FILE_SYSTEM lazy init: open_fs done");
-        result
-    };
+    pub static ref FILE_SYSTEM: Arc<dyn VFS> =
+        <dyn VFS>::open_fs(BLOCK_DEVICE.clone(), Arc::new(Mutex::new(BlockCacheManager::new())));
     // 目录树根节点
     pub static ref ROOT: Arc<DirectoryTreeNode> = {
-        println!("[debug] ROOT lazy init: entry");
         let curr_fs_type = FILE_SYSTEM.get_filesystem_type();
-        println!("[debug] ROOT lazy init: curr_fs_type={:?}", curr_fs_type);
-        println!("[debug] ROOT lazy init: calling root_osinode");
-        let osinode = <dyn VFS>::root_osinode(&FILE_SYSTEM);
-        println!("[debug] ROOT lazy init: root_osinode done");
-        println!("[debug] ROOT lazy init: creating DirectoryTreeNode");
         let inode = DirectoryTreeNode::new(
-            // 因为是根节点，所以没有名字（根目录是不是只有'/'，斜杠左边是不是啥也没有？）
+            // 因为是根节点，所以没有名字（根目录是不是只有‘/’，斜杠左边是不是啥也没有？）
             "".to_string(),
             // 通过获取FILE_SYSTEM的类型来创建目录树的文件系统字段
             Arc::new(FileSystem::new(curr_fs_type)),
             // // 系统Inode，包装了具体文件系统的Inode
-            osinode,
+            <dyn VFS>::root_osinode(&FILE_SYSTEM),
             // 父节点，因为是根节点所以没有父节点
             Weak::new(),
         );
-        println!("[debug] ROOT lazy init: DirectoryTreeNode created");
         inode.add_special_use();
-        println!("[debug] ROOT lazy init: done");
         inode
     };
     pub static ref GLOBAL_BLOCK_SIZE: usize = FILE_SYSTEM.block_size();
@@ -713,21 +701,14 @@ pub fn oom() -> usize {
 
 // 初始化文件系统
 pub fn init_fs() {
-    println!("[debug] init_fs: entry");
     init_device_directory();
-    println!("[debug] init_fs: init_device_directory done");
     init_tmp_directory();
-    println!("[debug] init_fs: init_tmp_directory done");
     init_proc_directory();
-    println!("[debug] init_fs: init_proc_directory done");
-    println!("[debug] init_fs: all done");
 }
 #[allow(unused)]
 // 初始化设备目录
 fn init_device_directory() {
-    println!("[debug] init_device_directory: entry");
     ROOT.mkdir("/dev");
-    println!("[debug] init_device_directory: mkdir /dev done");
 
     let dev_inode = match ROOT.cd_path("/dev") {
         Ok(inode) => inode,

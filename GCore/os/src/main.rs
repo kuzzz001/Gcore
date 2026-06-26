@@ -109,14 +109,11 @@ pub fn rust_main() -> ! {
     println!("[kernel] Hello, world!");
 
     machine_init();
-    println!("[debug] rust_main: machine_init done");
     #[cfg(feature = "board_rvqemu")]
     timer::init_rtc_time();
     utils::random::init_rng();
-    println!("[debug] rust_main: calling init_fs");
 
     fs::directory_tree::init_fs();
-    println!("[debug] rust_main: init_fs done");
     net::config::init();
     #[cfg(feature = "block_virt")]
     println!("[kernel] block in virt mode!");

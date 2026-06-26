@@ -38,12 +38,9 @@ pub fn pre_mount() -> FS_Type {
     // 如果是fat32，返回FS_Type::Fat32
     // 否则尝试获取超级块的魔数，如果是0xEF53，返回FS_Type::Ext4
     // 否则返回FS_Type::Null
-    println!("[debug] pre_mount: entry");
     let block_device = BLOCK_DEVICE.clone();
     let mut buf = [0u8; BLOCK_SIZE];
-    println!("[debug] pre_mount: reading block 0");
     block_device.read_block(0, &mut buf);
-    println!("[debug] pre_mount: block 0 read, checking magic");
     // 判断第512个字节是不是0x55AA
     if buf[510] == 0x55 && buf[511] == 0xAA {
         println!("[fs] found fat32 filesystem");

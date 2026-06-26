@@ -362,14 +362,10 @@ impl Block {
     /// 使用块号加载一个块
     #[no_mangle]
     pub fn load_id(block_device: Arc<dyn BlockDevice>, block_id: usize, offset: usize) -> Self {
-        println!("[debug] Block::load_id: block_id={}, offset={}", block_id, offset);
         let buf_len = crate::hal::BLOCK_SZ;
         let mut buf = vec![0u8; buf_len];
-        println!("[debug] Block::load_id: buf allocated, reading block");
         block_device.read_block(block_id, &mut buf);
-        println!("[debug] Block::load_id: block read, to_vec");
         let data = buf.to_vec();
-        println!("[debug] Block::load_id: done");
         Block {
             disk_offset: offset,
             data,

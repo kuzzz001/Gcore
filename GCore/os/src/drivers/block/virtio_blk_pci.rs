@@ -29,13 +29,11 @@ lazy_static! {
 
 impl BlockDevice for VirtIOBlock {
     fn read_block(&self, block_id: usize, buf: &mut [u8]) {
-        println!("[debug] VirtIOBlock::read_block: block_id={}, len={}", block_id, buf.len());
         assert!(buf.len() % BLOCK_SZ == 0);
         for (i, chunk) in buf.chunks_mut(VIRT_IO_BLOCK_SZ).enumerate() {
             let virtio_block_id = block_id * BLOCK_RATIO + i;
             self.0.lock().read_blocks(virtio_block_id, chunk).expect("read error");
         }
-        println!("[debug] VirtIOBlock::read_block: done");
     }
 
     fn write_block(&self, block_id: usize, buf: &[u8]) {

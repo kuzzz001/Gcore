@@ -55,24 +55,17 @@ impl Ext4FileSystem {
         block_device: Arc<dyn BlockDevice>,
         index_cache_mgr: Arc<Mutex<BlockCacheManager>>,
     ) -> Self {
-        println!("[debug] open_ext4rs: entry");
         // 读取超级块
-        println!("[debug] open_ext4rs: load_superblock");
         let block = Block::load_superblock(block_device.clone(), 0);
-        println!("[debug] open_ext4rs: read superblock struct");
         let superblock = block.read_offset_as_superblock(SUPERBLOCK_OFFSET);
-        println!("[debug] open_ext4rs: superblock loaded");
         let block_size = superblock.clone().block_size() as usize;
-        println!("[debug] open_ext4rs: block_size={}", block_size);
         let cache_mgr = index_cache_mgr.clone();
-        println!("[debug] open_ext4rs: constructing Ext4FileSystem");
         let ext4fs = Ext4FileSystem {
             block_device,
             superblock,
             block_size,
             cache_mgr,
         };
-        println!("[debug] open_ext4rs: done");
         // ext4fs.test_info();
         ext4fs
     }
