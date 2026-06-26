@@ -864,7 +864,23 @@ pub fn sys_prlimit(
                     }
                 }
                 Resource::ILLEAGAL => return EINVAL,
-                _ => return EINVAL,
+                // 有效但未特殊处理的资源(如 RLIMIT_CORE/CPU/DATA 等)返回 unlimited，
+                // 避免 getrlimit/prlimit 因 EINVAL 让 LTP 测试 setup 直接 TBROK。
+                _ => {
+                    if copy_to_user(
+                        token,
+                        &(RLimit {
+                            rlim_cur: usize::MAX,
+                            rlim_max: usize::MAX,
+                        }),
+                        old_limit,
+                    )
+                    .is_err()
+                    {
+                        log::error!("[sys_prlimit] Failed to copy to {:?}", old_limit);
+                        return EFAULT;
+                    }
+                }
             }
         }
         if !new_limit.is_null() {
@@ -886,7 +902,8 @@ pub fn sys_prlimit(
                     assert!(rlimit.rlim_cur <= USER_STACK_SIZE);
                 }
                 Resource::ILLEAGAL => return EINVAL,
-                _ => return EINVAL,
+                // 其它资源的限制设置：静默接受(不实际生效),避免 LTP 测试 TBROK。
+                _ => {}
             }
         }
     } else {
