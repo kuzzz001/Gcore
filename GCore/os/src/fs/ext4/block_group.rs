@@ -347,10 +347,10 @@ pub struct Block {
 impl Block {
     /// 加载超级块
     pub fn load_superblock(block_device: Arc<dyn BlockDevice>, offset: usize) -> Self {
-        let block_size = 4096;
+        let block_size = crate::hal::BLOCK_SZ;
         let block_id = offset / block_size;
         // Self::load_id(block_device, block_id, offset)
-        let mut buf = [0u8; 4096];
+        let mut buf = vec![0u8; block_size];
         block_device.read_block(block_id, &mut buf);
         let data = buf.to_vec();
         Block {
@@ -363,7 +363,8 @@ impl Block {
     #[no_mangle]
     pub fn load_id(block_device: Arc<dyn BlockDevice>, block_id: usize, offset: usize) -> Self {
         println!("[debug] Block::load_id: block_id={}, offset={}", block_id, offset);
-        let mut buf = vec![0u8; *GLOBAL_BLOCK_SIZE];
+        let buf_len = crate::hal::BLOCK_SZ;
+        let mut buf = vec![0u8; buf_len];
         println!("[debug] Block::load_id: buf allocated, reading block");
         block_device.read_block(block_id, &mut buf);
         println!("[debug] Block::load_id: block read, to_vec");
@@ -379,8 +380,8 @@ impl Block {
     /// + 通过 offset/BLOCK_SIZE 获取 block_id 也即块号
     /// + 然后调用load_id
     pub fn load_offset(block_device: Arc<dyn BlockDevice>, offset: usize) -> Self {
-        let block_size = *GLOBAL_BLOCK_SIZE;
-        let block_id = offset / block_size;
+        let phys_block_size = crate::hal::BLOCK_SZ;
+        let block_id = offset / phys_block_size;
         Self::load_id(block_device, block_id, offset)
     }
 

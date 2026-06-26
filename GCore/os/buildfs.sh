@@ -8,7 +8,7 @@ IMG_SZ="56"
 if [ $# -ge 2 ]; then
     if [ "$2" = "2k1000" ] || [ "$2" = "laqemu" ]; then
         TARGET=loongarch64-unknown-linux-gnu
-        BLK_SZ="2048"
+        BLK_SZ="4096"
         IMG_SZ="150"
     else
         TARGET=riscv64gc-unknown-none-elf
