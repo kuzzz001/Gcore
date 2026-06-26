@@ -833,16 +833,23 @@ impl Ext4FileSystem {
 
     /// 从磁盘加载inoderef对象
     pub fn get_inode_ref(&self, inode_num: u32) -> Ext4InodeRef {
+        println!("[debug] get_inode_ref: inode_num={}", inode_num);
         let offset = self.inode_disk_pos(inode_num);
+        println!("[debug] get_inode_ref: offset={:#x}", offset);
         let mut ext4block = Block::load_offset(self.block_device.clone(), offset);
+        println!("[debug] get_inode_ref: block loaded");
         // println!("[kernel] ext4block.diskoffset is {:?}", ext4block.disk_offset);
         // println!("[kernel] ext4block.data is {:?}", ext4block.data);
         let blk_offset = offset % self.block_size;
+        println!("[debug] get_inode_ref: reading inode at blk_offset={}", blk_offset);
         let inode: &mut Ext4Inode = ext4block.read_offset_as_mut(offset % self.block_size);
-        Ext4InodeRef {
+        println!("[debug] get_inode_ref: creating Ext4InodeRef");
+        let result = Ext4InodeRef {
             inode_num,
             inode: *inode,
-        }
+        };
+        println!("[debug] get_inode_ref: done");
+        result
     }
 
     /// 从磁盘加载带Arc包装的inoderef对象
