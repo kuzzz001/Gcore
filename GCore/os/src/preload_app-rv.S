@@ -24,3 +24,21 @@ sbusybox:
     .incbin "./busybox-rv"
 ebusybox:
     .align 12
+
+    .section .data
+    .global sldmusl
+    .global eldmusl
+    .align 12
+sldmusl:
+    .incbin "./ld-musl-riscv64.so.1"
+eldmusl:
+    .align 12
+
+    .section .data
+    .global sldglibc
+    .global eldglibc
+    .align 12
+sldglibc:
+    .incbin "./ld-linux-riscv64-lp64d.so.1"
+eldglibc:
+    .align 12
