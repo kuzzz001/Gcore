@@ -171,6 +171,28 @@ pub fn flush_preload() {
         ) {
             crate::mm::frame_dealloc(ppn);
         }
+
+        // --- library search path config ---
+
+        // musl: /etc/ld-musl-loongarch64.path
+        ROOT_FD
+            .mkdir("etc")
+            .or_else(|e| if e == 17 || e == -17 /* EEXIST */ || e == -1 { Ok(()) } else { Err(e) })
+            .unwrap_or(());
+        let ld_path = ROOT_FD
+            .open(
+                "etc/ld-musl-loongarch64.path",
+                OpenFlags::O_CREAT,
+                false,
+            )
+            .expect("Failed to create ld-musl path file");
+        ld_path.write(None, b"/musl/lib\n/lib\n/user/lib\n");
+
+        // glibc: /etc/ld.so.conf
+        let ld_conf = ROOT_FD
+            .open("etc/ld.so.conf", OpenFlags::O_CREAT, false)
+            .expect("Failed to create ld.so.conf");
+        ld_conf.write(None, b"/glibc/lib\n/lib64\n");
     }
 
     #[cfg(feature = "riscv")]
@@ -262,5 +284,27 @@ pub fn flush_preload() {
         ) {
             crate::mm::frame_dealloc(ppn);
         }
+
+        // --- library search path config ---
+
+        // musl: /etc/ld-musl-riscv64.path
+        ROOT_FD
+            .mkdir("etc")
+            .or_else(|e| if e == 17 || e == -17 /* EEXIST */ || e == -1 { Ok(()) } else { Err(e) })
+            .unwrap_or(());
+        let ld_path = ROOT_FD
+            .open(
+                "etc/ld-musl-riscv64.path",
+                OpenFlags::O_CREAT,
+                false,
+            )
+            .expect("Failed to create ld-musl path file");
+        ld_path.write(None, b"/musl/lib\n/lib\n/user/lib\n");
+
+        // glibc: /etc/ld.so.conf
+        let ld_conf = ROOT_FD
+            .open("etc/ld.so.conf", OpenFlags::O_CREAT, false)
+            .expect("Failed to create ld.so.conf");
+        ld_conf.write(None, b"/glibc/lib\n/lib\n");
     }
 }
