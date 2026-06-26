@@ -9,22 +9,26 @@ QEMU_DIR := util/qemu-2k1000/tmp
 QEMU_TAR_PATH := $(QEMU_DIR)/$(QEMU_TAR)
 
 # Competition targets: must produce kernel-rv and kernel-la ELF files
-# OJ filters hidden dirs (.cargo), so store config as visible dotcargo_*.
+# OJ filters hidden dirs (.cargo) and may not support symlinks.
+# Store config in visible dotcargo_* dirs, copy at build time.
 all:
-	@ln -sfn dotcargo_os os/.cargo
-	@ln -sfn dotcargo_user user/.cargo
+	@mkdir -p os/.cargo user/.cargo
+	@cp -f os/dotcargo_os/config.toml os/.cargo/config.toml
+	@cp -f user/dotcargo_user/config.toml user/.cargo/config.toml
 	make -C os all
 	@echo "=== Build complete: kernel-rv, kernel-la ==="
 	@file kernel-rv kernel-la 2>/dev/null || true
 
 kernel-rv:
-	@ln -sfn dotcargo_os os/.cargo
-	@ln -sfn dotcargo_user user/.cargo
+	@mkdir -p os/.cargo user/.cargo
+	@cp -f os/dotcargo_os/config.toml os/.cargo/config.toml
+	@cp -f user/dotcargo_user/config.toml user/.cargo/config.toml
 	make -C os rv64-only
 
 kernel-la:
-	@ln -sfn dotcargo_os os/.cargo
-	@ln -sfn dotcargo_user user/.cargo
+	@mkdir -p os/.cargo user/.cargo
+	@cp -f os/dotcargo_os/config.toml os/.cargo/config.toml
+	@cp -f user/dotcargo_user/config.toml user/.cargo/config.toml
 	make -C os la64-only
 
 env:
