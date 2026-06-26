@@ -28,6 +28,10 @@ la64_all:
 	make ARCH=la64 -f make/la64.mk all MODE=${MODE}
 
 rv64-kernel-build-only:
+	@rm -rf .cargo ../user/.cargo 2>/dev/null || true
+	@mkdir -p .cargo ../user/.cargo
+	@cat dotcargo_os/config.toml > .cargo/config.toml
+	@cat ../user/dotcargo_user/config.toml > ../user/.cargo/config.toml
 	@rustup override set nightly-2025-01-18-x86_64-unknown-linux-gnu
 	cp ./src/lang_items.rs.rv ./src/lang_items.rs
 	cp ../user/src/lang_items.rs.rv ../user/src/lang_items.rs
@@ -65,6 +69,10 @@ la64-only:
 	make -f make/la64o.mk all 
 
 la64-kernel-build-only:
+	@rm -rf .cargo ../user/.cargo 2>/dev/null || true
+	@mkdir -p .cargo ../user/.cargo
+	@cat dotcargo_os/config.toml > .cargo/config.toml
+	@cat ../user/dotcargo_user/config.toml > ../user/.cargo/config.toml
 	@rustup override set nightly-2024-05-01-x86_64-unknown-linux-gnu
 	cp ./src/lang_items.rs.la ./src/lang_items.rs
 	cp ../user/src/lang_items.rs.la ../user/src/lang_items.rs
